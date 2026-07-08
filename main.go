@@ -300,6 +300,7 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 				expandableRows = make(map[int]string)
 				mu.Unlock()
 				render()
+				resetTableView(table)
 			})
 		pages.AddPage("history", modal, true, true)
 		app.SetFocus(modal)
@@ -339,6 +340,7 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 			expandableRows = make(map[int]string)
 			mu.Unlock()
 			render()
+			resetTableView(table)
 			return nil
 		case 'o', 'O':
 			openHistoryModal()
@@ -355,6 +357,11 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	default:
 	}
 	return err
+}
+
+func resetTableView(table *tview.Table) {
+	table.ScrollToBeginning()
+	table.Select(1, 0)
 }
 
 func processLine(line string, tracker *combat.FightTracker, idleTimeout time.Duration) {
