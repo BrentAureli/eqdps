@@ -259,14 +259,24 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		AddItem(status, 1, 0, false)
 	pages := tview.NewPages().
 		AddPage("main", layout, true, true)
+	historyOpen := false
+
+	closeHistoryModal := func() {
+		pages.RemovePage("history")
+		historyOpen = false
+		app.SetFocus(table)
+	}
 
 	openHistoryModal := func() {
+		if historyOpen {
+			return
+		}
+		historyOpen = true
 		modal := tview.NewModal().
 			SetText("Open history").
 			AddButtons([]string{"Now", "Last Hour", "Last 4 Hours", "Last 8 Hours", "Last Day", "Cancel"}).
 			SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-				pages.RemovePage("history")
-				app.SetFocus(table)
+				closeHistoryModal()
 				if buttonLabel == "Cancel" {
 					return
 				}
@@ -296,6 +306,14 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	}
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if historyOpen {
+			if event.Key() == tcell.KeyEsc {
+				closeHistoryModal()
+				return nil
+			}
+			return event
+		}
+
 		switch event.Key() {
 		case tcell.KeyEsc:
 			stop()
