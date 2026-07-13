@@ -107,11 +107,12 @@ A fight ends when one of these happens:
 - `You have been slain by ...` is found
 - no combat is seen for the idle timeout
 
-Damage shields and damage-over-time ticks do not change the active target. This
-keeps a pet's death from splitting its owner's fight when the pet only damaged
-`You` or triggered a damage shield. If the log prints late damage from the mob
-that ended the fight immediately after its death line, `eqdps` keeps that damage
-in the completed fight. Damage involving a different mob starts a new fight.
+Damage shields, damage-over-time ticks, and incidental hits on the active mob's
+pet do not change the active target. This keeps a pet's death from splitting its
+owner's fight when the pet damaged `You`, triggered a damage shield, or received
+a secondary/riposte hit. If the log prints late damage from the mob that ended
+the fight immediately after its death line, `eqdps` keeps that damage in the
+completed fight. Damage involving a different mob starts a new fight.
 
 ## Development
 

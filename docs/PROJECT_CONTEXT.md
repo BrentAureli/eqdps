@@ -90,8 +90,9 @@ the beginning and selects row 1.
 
 Only the `You` row is expandable. Details show damage grouped by ability. Each
 detail row places ability damage under Damage, ability DPS under DPS, and its
-share of total damage under Last Target. Events without an ability are grouped
-as `Melee`; merged pet damage is grouped as `Pet: <pet name>`.
+share of total damage under Last Target. All periodic damage is combined as
+`DoTs`; events without an ability are grouped as `Melee`; merged pet damage is
+grouped as `Pet: <pet name>`.
 
 Important tview concurrency rule: background goroutines use
 `app.QueueUpdateDraw(render)`. UI event handlers call `render()` directly;
@@ -176,8 +177,10 @@ A damage event creates the current fight. A death becomes a pending fight end
 only when the victim is the mob most recently attacked by `You`, when every
 hostile mob observed fighting `You` is dead, or when `You` dies. Damage-shield
 and damage-over-time events are passive: they identify involved hostiles but do
-not replace the active target. This prevents a pet that only hits `You` or
-triggers a damage shield from splitting the owner's fight. EverQuest can emit
+not replace the active target. An incidental hit on the active mob's possessive
+pet or `<owner> pet` also leaves the owner active; EverQuest may log secondary
+or riposte damage against a pet that the player never selected. These rules
+prevent the pet's death from splitting the owner's fight. EverQuest can emit
 late damage near a death message, so a qualifying mob death is not finalized
 immediately.
 

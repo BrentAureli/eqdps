@@ -63,6 +63,8 @@ func TestMeterTracksDamageBreakdown(t *testing.T) {
 	meter.Add(Event{Time: now.Add(time.Second), Source: "You", Target: "mob", Amount: 40, Ability: "Spell1"})
 	meter.Add(Event{Time: now.Add(2 * time.Second), Source: "You", Target: "mob", Amount: 90, Ability: "Spell2"})
 	meter.Add(Event{Time: now.Add(3 * time.Second), Source: "You", Target: "mob", Amount: 90})
+	meter.Add(Event{Time: now.Add(4 * time.Second), Source: "You", Target: "mob", Amount: 50, Ability: "Tuyen's Chant of Disease", DamageOverTime: true})
+	meter.Add(Event{Time: now.Add(5 * time.Second), Source: "You", Target: "mob", Amount: 60, Ability: "Tuyen's Chant of Flame", DamageOverTime: true})
 
 	players := meter.Players()
 	if len(players) != 1 {
@@ -70,10 +72,10 @@ func TestMeterTracksDamageBreakdown(t *testing.T) {
 	}
 
 	breakdown := players[0].DamageBreakdown()
-	if len(breakdown) != 3 {
-		t.Fatalf("expected 3 damage types, got %#v", breakdown)
+	if len(breakdown) != 4 {
+		t.Fatalf("expected 4 damage types, got %#v", breakdown)
 	}
-	expected := map[string]int{"Melee": 100, "Spell1": 40, "Spell2": 90}
+	expected := map[string]int{"Melee": 100, "Spell1": 40, "Spell2": 90, "DoTs": 110}
 	for _, entry := range breakdown {
 		if expected[entry.Name] != entry.Damage {
 			t.Fatalf("unexpected breakdown entry: %#v", entry)
@@ -166,21 +168,40 @@ func TestFightTrackerIgnoresPetDeathWhilePlayersActiveTargetLives(t *testing.T) 
 		Ability: "thorns",
 		Passive: true,
 	})
-	tracker.AddDeath(Death{Time: now.Add(3 * time.Second), Victim: "a necromancer's pet", Killer: "You"})
-	tracker.AddDamage(Event{Time: now.Add(4 * time.Second), Source: "You", Target: "a necromancer", Amount: 12})
+	tracker.AddDamage(Event{Time: now.Add(3 * time.Second), Source: "You", Target: "a necromancer's pet", Amount: 58})
+	tracker.AddDeath(Death{Time: now.Add(4 * time.Second), Victim: "a necromancer's pet", Killer: "You"})
+	tracker.AddDamage(Event{Time: now.Add(5 * time.Second), Source: "You", Target: "a necromancer", Amount: 12})
 
 	fight, current := tracker.DisplayFight()
 	if fight == nil || !current {
 		t.Fatalf("expected pet death to leave the fight current, got fight=%#v current=%v", fight, current)
 	}
-	if fight.Meter.Events() != 4 {
-		t.Fatalf("expected one unsplit fight with four events, got %d", fight.Meter.Events())
+	if fight.Meter.Events() != 5 {
+		t.Fatalf("expected one unsplit fight with five events, got %d", fight.Meter.Events())
 	}
 
-	tracker.AddDeath(Death{Time: now.Add(5 * time.Second), Victim: "a necromancer", Killer: "You"})
+	tracker.AddDeath(Death{Time: now.Add(6 * time.Second), Victim: "a necromancer", Killer: "You"})
 	fight, current = tracker.DisplayFight()
 	if fight == nil || current || fight.Death.Victim != "a necromancer" {
 		t.Fatalf("expected active target death to end fight, got fight=%#v current=%v", fight, current)
+	}
+}
+
+func TestFightTrackerTreatsOwnerPetSuffixAsIncidentalTarget(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 5, 14, 2, 40, 0, time.UTC)
+
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "Hoptor Thaggelum", Amount: 4})
+	tracker.AddDamage(Event{Time: now.Add(time.Second), Source: "You", Target: "Hoptor Thaggelum pet", Amount: 58})
+	tracker.AddDeath(Death{Time: now.Add(2 * time.Second), Victim: "Hoptor Thaggelum pet", Killer: "You"})
+
+	if fight, current := tracker.DisplayFight(); fight == nil || !current || fight.Meter.Events() != 2 {
+		t.Fatalf("expected the owner's fight to survive an incidental pet strike and death, got fight=%#v current=%v", fight, current)
+	}
+
+	tracker.AddDeath(Death{Time: now.Add(3 * time.Second), Victim: "Hoptor Thaggelum", Killer: "You"})
+	if fight, current := tracker.DisplayFight(); fight == nil || current || fight.Death.Victim != "Hoptor Thaggelum" {
+		t.Fatalf("expected owner death to end fight, got fight=%#v current=%v", fight, current)
 	}
 }
 

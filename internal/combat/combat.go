@@ -11,14 +11,15 @@ const DefaultIdleTimeout = 15 * time.Second
 const DefaultFightHistory = 0
 
 type Event struct {
-	Time     time.Time
-	Source   string
-	Target   string
-	Amount   int
-	Kind     string
-	Ability  string
-	Critical bool
-	Passive  bool
+	Time           time.Time
+	Source         string
+	Target         string
+	Amount         int
+	Kind           string
+	Ability        string
+	Critical       bool
+	Passive        bool
+	DamageOverTime bool
 }
 
 type Death struct {
@@ -209,6 +210,9 @@ type DamageBreakdown struct {
 }
 
 func damageType(event Event) string {
+	if event.DamageOverTime {
+		return "DoTs"
+	}
 	if event.Ability != "" {
 		return event.Ability
 	}
@@ -415,13 +419,32 @@ func (t *FightTracker) trackHostiles(event Event) {
 	}
 	if sameCombatant(event.Source, "You") && !sameCombatant(event.Target, "You") {
 		t.addHostile(event.Target)
-		if !event.Passive {
+		if !event.Passive && !t.isActiveTargetsPet(event.Target) {
 			t.activeTarget = event.Target
 		}
 	}
 	if sameCombatant(event.Target, "You") && !sameCombatant(event.Source, "You") {
 		t.addHostile(event.Source)
 	}
+}
+
+func (t *FightTracker) isActiveTargetsPet(target string) bool {
+	owner, ok := apparentPetOwner(target)
+	if !ok || !sameCombatant(owner, t.activeTarget) {
+		return false
+	}
+	return !t.deadHostiles[combatantKey(owner)]
+}
+
+func apparentPetOwner(name string) (string, bool) {
+	trimmed := strings.TrimSpace(name)
+	if owner, _, ok := possessiveOwner(trimmed); ok {
+		return owner, true
+	}
+	if len(trimmed) > len(" pet") && strings.EqualFold(trimmed[len(trimmed)-len(" pet"):], " pet") {
+		return strings.TrimSpace(trimmed[:len(trimmed)-len(" pet")]), true
+	}
+	return "", false
 }
 
 func (t *FightTracker) addHostile(name string) {

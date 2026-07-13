@@ -204,7 +204,7 @@ func TestParseLineYourDotDamage(t *testing.T) {
 	if !ok {
 		t.Fatal("expected damage event")
 	}
-	if event.Source != "You" || event.Target != "a zol ghoul knight" || event.Amount != 49 || event.Ability != "Tuyen's Chant of Flame" || !event.Passive {
+	if event.Source != "You" || event.Target != "a zol ghoul knight" || event.Amount != 49 || event.Ability != "Tuyen's Chant of Flame" || !event.Passive || !event.DamageOverTime {
 		t.Fatalf("unexpected event: %#v", event)
 	}
 }

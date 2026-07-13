@@ -98,14 +98,15 @@ func ParseLine(line string) (combat.Event, bool) {
 		}
 
 		return combat.Event{
-			Time:     timestamp,
-			Source:   "You",
-			Target:   normalizeTarget(strings.TrimSpace(yourDot[1])),
-			Amount:   amount,
-			Kind:     "damage",
-			Ability:  strings.TrimSpace(yourDot[3]),
-			Critical: isCritical(yourDot[4]),
-			Passive:  true,
+			Time:           timestamp,
+			Source:         "You",
+			Target:         normalizeTarget(strings.TrimSpace(yourDot[1])),
+			Amount:         amount,
+			Kind:           "damage",
+			Ability:        strings.TrimSpace(yourDot[3]),
+			Critical:       isCritical(yourDot[4]),
+			Passive:        true,
+			DamageOverTime: true,
 		}, true
 	}
 
@@ -120,14 +121,15 @@ func ParseLine(line string) (combat.Event, bool) {
 		return combat.Event{}, false
 	}
 	return combat.Event{
-		Time:     timestamp,
-		Source:   normalizeSource(source),
-		Target:   normalizeTarget(target),
-		Amount:   amount,
-		Kind:     "damage",
-		Ability:  strings.TrimSpace(dot[3]),
-		Critical: isCritical(dot[5]),
-		Passive:  true,
+		Time:           timestamp,
+		Source:         normalizeSource(source),
+		Target:         normalizeTarget(target),
+		Amount:         amount,
+		Kind:           "damage",
+		Ability:        strings.TrimSpace(dot[3]),
+		Critical:       isCritical(dot[5]),
+		Passive:        true,
+		DamageOverTime: true,
 	}, true
 }
 
