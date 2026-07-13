@@ -3,6 +3,9 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/rivo/tview"
+	"github.com/uija/eqdps/internal/combat"
 )
 
 func TestFitTextTruncatesWithEllipsis(t *testing.T) {
@@ -37,5 +40,28 @@ func TestHistoryDuration(t *testing.T) {
 		if got != expected {
 			t.Fatalf("expected %q to map to %s, got %s", label, expected, got)
 		}
+	}
+}
+
+func TestDamageBreakdownShowsDPSAndPercentInExpectedColumns(t *testing.T) {
+	started := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	player := combat.PlayerStats{
+		Name:        "You",
+		Damage:      100,
+		FirstSeen:   started,
+		LastSeen:    started.Add(9 * time.Second),
+		DamageTypes: map[string]int{"Tuyen's Chant of Flame": 40},
+	}
+	table := tview.NewTable()
+
+	nextRow := addDamageBreakdownRows(table, 0, player, tableLayoutForWidth(100))
+	if nextRow != 1 {
+		t.Fatalf("expected one detail row, got next row %d", nextRow)
+	}
+	if got := table.GetCell(0, 2).Text; got != "4.00" {
+		t.Fatalf("expected ability DPS in DPS column, got %q", got)
+	}
+	if got := table.GetCell(0, 6).Text; got != "40.0%" {
+		t.Fatalf("expected percentage in Last Target column, got %q", got)
 	}
 }

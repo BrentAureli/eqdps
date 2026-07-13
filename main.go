@@ -534,18 +534,19 @@ func fillTable(table *tview.Table, sections []combat.DisplaySection, expandedRow
 }
 
 func addDamageBreakdownRows(table *tview.Table, row int, player combat.PlayerStats, layout tableLayout) int {
+	activeDuration := player.ActiveDuration()
 	for _, entry := range player.DamageBreakdown() {
-		table.SetCell(row, 0, tableCell("  "+entry.Name, 0, layout).
-			SetTextColor(tcell.ColorLightCyan).
-			SetSelectable(false))
-		table.SetCell(row, 1, tableCell(fmt.Sprintf("%d", entry.Damage), 1, layout).
-			SetTextColor(tcell.ColorLightCyan).
-			SetSelectable(false))
-		table.SetCell(row, 2, tableCell(fmt.Sprintf("%.1f%%", percent(entry.Damage, player.Damage)), 2, layout).
-			SetTextColor(tcell.ColorLightCyan).
-			SetSelectable(false))
-		for col := 3; col < 7; col++ {
-			table.SetCell(row, col, tableCell("", col, layout).
+		values := []string{
+			"  " + entry.Name,
+			fmt.Sprintf("%d", entry.Damage),
+			fmt.Sprintf("%.2f", damageDPS(entry.Damage, activeDuration)),
+			"",
+			"",
+			"",
+			fmt.Sprintf("%.1f%%", percent(entry.Damage, player.Damage)),
+		}
+		for col, value := range values {
+			table.SetCell(row, col, tableCell(value, col, layout).
 				SetTextColor(tcell.ColorLightCyan).
 				SetSelectable(false))
 		}
@@ -648,6 +649,14 @@ func percent(part, total int) float64 {
 		return 0
 	}
 	return float64(part) * 100 / float64(total)
+}
+
+func damageDPS(damage int, activeDuration time.Duration) float64 {
+	seconds := activeDuration.Seconds()
+	if seconds <= 0 {
+		return 0
+	}
+	return float64(damage) / seconds
 }
 
 func previousFightCells(index int, section combat.DisplaySection) (string, string, string) {

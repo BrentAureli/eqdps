@@ -54,6 +54,16 @@ func TestParseLineFinishingBlow(t *testing.T) {
 	}
 }
 
+func TestParseLineRiposteCritical(t *testing.T) {
+	event, ok := ParseLine("[Sun Jul 05 10:41:01 2026] You slash a guk ghoul knight for 38 points of damage. (Riposte Critical)")
+	if !ok {
+		t.Fatal("expected damage event")
+	}
+	if !event.Critical {
+		t.Fatalf("expected riposte critical event: %#v", event)
+	}
+}
+
 func TestParseLineThornsDamage(t *testing.T) {
 	event, ok := ParseLine("[Sun Jul 05 17:21:42 2026] A rock golem is pierced by YOUR thorns for 20 points of non-melee damage.")
 	if !ok {
@@ -61,6 +71,48 @@ func TestParseLineThornsDamage(t *testing.T) {
 	}
 	if event.Source != "You" || event.Target != "a rock golem" || event.Amount != 20 || event.Ability != "thorns" {
 		t.Fatalf("unexpected event: %#v", event)
+	}
+}
+
+func TestParseLineOtherCombatantDamageShield(t *testing.T) {
+	tests := []struct {
+		line    string
+		source  string
+		target  string
+		ability string
+		amount  int
+	}{
+		{
+			line:    "[Sun Jul 05 19:15:54 2026] A fire giant warrior is pierced by Clown's thorns for 29 points of non-melee damage.",
+			source:  "Clown",
+			target:  "a fire giant warrior",
+			ability: "thorns",
+			amount:  29,
+		},
+		{
+			line:    "[Mon Jul 06 07:41:35 2026] YOU are burned by a forsaken revenant's flames for 19 points of non-melee damage!",
+			source:  "a forsaken revenant",
+			target:  "YOU",
+			ability: "flames",
+			amount:  19,
+		},
+		{
+			line:    "[Wed Jul 08 17:21:17 2026] YOU are pierced by Innoruuk's Chosen's thorns for 13 points of non-melee damage!",
+			source:  "Innoruuk's Chosen",
+			target:  "YOU",
+			ability: "thorns",
+			amount:  13,
+		},
+	}
+
+	for _, test := range tests {
+		event, ok := ParseLine(test.line)
+		if !ok {
+			t.Fatalf("expected damage event for %q", test.line)
+		}
+		if event.Source != test.source || event.Target != test.target || event.Ability != test.ability || event.Amount != test.amount {
+			t.Fatalf("unexpected event for %q: %#v", test.line, event)
+		}
 	}
 }
 
@@ -104,6 +156,54 @@ func TestParseLineDotDamage(t *testing.T) {
 		t.Fatal("expected damage event")
 	}
 	if event.Source != "Sobatin" || event.Target != "an orc raider" || event.Amount != 2 || event.Ability != "Flame Lick" {
+		t.Fatalf("unexpected event: %#v", event)
+	}
+}
+
+func TestParseLineIncomingDotDamage(t *testing.T) {
+	event, ok := ParseLine("[Fri Jul 10 14:14:43 2026] You have taken 10 damage from Poison by a deadly black widow.")
+	if !ok {
+		t.Fatal("expected damage event")
+	}
+	if event.Source != "a deadly black widow" || event.Target != "YOU" || event.Amount != 10 || event.Ability != "Poison" {
+		t.Fatalf("unexpected event: %#v", event)
+	}
+}
+
+func TestParseLineCriticalDotDamage(t *testing.T) {
+	event, ok := ParseLine("[Sun Jul 05 19:15:54 2026] A lava duct crawler has taken 36 damage from Denon's Disruptive Discord by Clown. (Critical)")
+	if !ok {
+		t.Fatal("expected damage event")
+	}
+	if event.Source != "Clown" || event.Target != "a lava duct crawler" || event.Amount != 36 || event.Ability != "Denon's Disruptive Discord" || !event.Critical {
+		t.Fatalf("unexpected event: %#v", event)
+	}
+}
+
+func TestParseLineDotWithoutSourceIsIgnored(t *testing.T) {
+	if event, ok := ParseLine("[Sun Jul 05 19:15:54 2026] A fire giant warrior has taken 18 damage by Denon's Disruptive Discord."); ok {
+		t.Fatalf("expected source-less damage to be ignored, got %#v", event)
+	}
+}
+
+func TestParseLineAdditionalMeleeVerbs(t *testing.T) {
+	lines := []string{
+		"[Sun Jul 05 20:49:40 2026] Bigg reaves a fire giant warrior for 24 points of damage.",
+		"[Sun Jul 05 19:04:17 2026] A watchful guard smashes YOU for 28 points of damage.",
+	}
+	for _, line := range lines {
+		if _, ok := ParseLine(line); !ok {
+			t.Fatalf("expected damage event for %q", line)
+		}
+	}
+}
+
+func TestParseLineYourDotDamage(t *testing.T) {
+	event, ok := ParseLine("[Mon Jul 13 09:08:08 2026] A zol ghoul knight has taken 49 damage from your Tuyen's Chant of Flame.")
+	if !ok {
+		t.Fatal("expected damage event")
+	}
+	if event.Source != "You" || event.Target != "a zol ghoul knight" || event.Amount != 49 || event.Ability != "Tuyen's Chant of Flame" {
 		t.Fatalf("unexpected event: %#v", event)
 	}
 }

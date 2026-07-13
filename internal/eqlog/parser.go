@@ -17,11 +17,13 @@ const timestampLayout = "Mon Jan 02 15:04:05 2006"
 var (
 	lineRE = regexp.MustCompile(`^\[([^\]]+)\] (.*)$`)
 
-	damageRE   = regexp.MustCompile(`^(.+?) (backstab|backstabs|bash|bashes|bite|bites|cleave|cleaves|claw|claws|crush|crushes|frenzies on|hit|hits|kick|kicks|maul|mauls|pierce|pierces|punch|punches|shoot|shoots|slash|slashes|slice|slices|smite|smites|strike|strikes) (.+?) for ([0-9]+) points? of ((?:[A-Za-z-]+ )?damage)(?: by ([^.]+))?\.(?: \(([^)]+)\))?$`)
-	dotRE      = regexp.MustCompile(`^(.+?) has taken ([0-9]+) damage from (.+?) by ([^.]+)\.$`)
-	thornsRE   = regexp.MustCompile(`^(.+?) is .+? by YOUR (.+?) for ([0-9]+) points? of ((?:[A-Za-z-]+ )?damage)\.(?: \(([^)]+)\))?$`)
-	youSlainRE = regexp.MustCompile(`^You have slain (.+)!$`)
-	slainByRE  = regexp.MustCompile(`^(.+) has been slain by (.+)!$`)
+	damageRE     = regexp.MustCompile(`^(.+?) (backstab|backstabs|bash|bashes|bite|bites|cleave|cleaves|claw|claws|crush|crushes|frenzies on|hit|hits|kick|kicks|maul|mauls|pierce|pierces|punch|punches|reave|reaves|shoot|shoots|slash|slashes|slice|slices|smash|smashes|smite|smites|strike|strikes) (.+?) for ([0-9]+) points? of ((?:[A-Za-z-]+ )?damage)(?: by ([^.]+))?\.(?: \(([^)]+)\))?$`)
+	dotRE        = regexp.MustCompile(`^(.+?) (?:has|have) taken ([0-9]+) damage from (.+?) by ([^.]+)\.(?: \(([^)]+)\))?$`)
+	yourDotRE    = regexp.MustCompile(`^(.+?) has taken ([0-9]+) damage from your (.+?)\.(?: \(([^)]+)\))?$`)
+	yourShieldRE = regexp.MustCompile(`^(.+?) is .+? by YOUR (.+?) for ([0-9]+) points? of ((?:[A-Za-z-]+ )?damage)\.(?: \(([^)]+)\))?$`)
+	shieldRE     = regexp.MustCompile("^(.+?) (?:is|are) .+? by (.+)(?:'s|`s) (.+?) for ([0-9]+) points? of ((?:[A-Za-z-]+ )?damage)[.!](?: \\(([^)]+)\\))?$")
+	youSlainRE   = regexp.MustCompile(`^You have slain (.+)!$`)
+	slainByRE    = regexp.MustCompile(`^(.+) has been slain by (.+)!$`)
 )
 
 func ParseLine(line string) (combat.Event, bool) {
@@ -46,13 +48,13 @@ func ParseLine(line string) (combat.Event, bool) {
 			Amount:   amount,
 			Kind:     strings.TrimSpace(damage[5]),
 			Ability:  strings.TrimSpace(damage[6]),
-			Critical: damage[7] == "Critical",
+			Critical: isCritical(damage[7]),
 		}, true
 	}
 
-	thorns := thornsRE.FindStringSubmatch(message)
-	if thorns != nil {
-		amount, err := strconv.Atoi(thorns[3])
+	yourShield := yourShieldRE.FindStringSubmatch(message)
+	if yourShield != nil {
+		amount, err := strconv.Atoi(yourShield[3])
 		if err != nil {
 			return combat.Event{}, false
 		}
@@ -60,11 +62,47 @@ func ParseLine(line string) (combat.Event, bool) {
 		return combat.Event{
 			Time:     timestamp,
 			Source:   "You",
-			Target:   normalizeTarget(strings.TrimSpace(thorns[1])),
+			Target:   normalizeTarget(strings.TrimSpace(yourShield[1])),
 			Amount:   amount,
-			Kind:     strings.TrimSpace(thorns[4]),
-			Ability:  strings.TrimSpace(thorns[2]),
-			Critical: thorns[5] == "Critical",
+			Kind:     strings.TrimSpace(yourShield[4]),
+			Ability:  strings.TrimSpace(yourShield[2]),
+			Critical: isCritical(yourShield[5]),
+		}, true
+	}
+
+	shield := shieldRE.FindStringSubmatch(message)
+	if shield != nil {
+		amount, err := strconv.Atoi(shield[4])
+		if err != nil {
+			return combat.Event{}, false
+		}
+
+		return combat.Event{
+			Time:     timestamp,
+			Source:   normalizeSource(strings.TrimSpace(shield[2])),
+			Target:   normalizeTarget(strings.TrimSpace(shield[1])),
+			Amount:   amount,
+			Kind:     strings.TrimSpace(shield[5]),
+			Ability:  strings.TrimSpace(shield[3]),
+			Critical: isCritical(shield[6]),
+		}, true
+	}
+
+	yourDot := yourDotRE.FindStringSubmatch(message)
+	if yourDot != nil {
+		amount, err := strconv.Atoi(yourDot[2])
+		if err != nil {
+			return combat.Event{}, false
+		}
+
+		return combat.Event{
+			Time:     timestamp,
+			Source:   "You",
+			Target:   normalizeTarget(strings.TrimSpace(yourDot[1])),
+			Amount:   amount,
+			Kind:     "damage",
+			Ability:  strings.TrimSpace(yourDot[3]),
+			Critical: isCritical(yourDot[4]),
 		}, true
 	}
 
@@ -79,13 +117,18 @@ func ParseLine(line string) (combat.Event, bool) {
 		return combat.Event{}, false
 	}
 	return combat.Event{
-		Time:    timestamp,
-		Source:  normalizeSource(source),
-		Target:  normalizeTarget(target),
-		Amount:  amount,
-		Kind:    "damage",
-		Ability: strings.TrimSpace(dot[3]),
+		Time:     timestamp,
+		Source:   normalizeSource(source),
+		Target:   normalizeTarget(target),
+		Amount:   amount,
+		Kind:     "damage",
+		Ability:  strings.TrimSpace(dot[3]),
+		Critical: isCritical(dot[5]),
 	}, true
+}
+
+func isCritical(marker string) bool {
+	return strings.Contains(marker, "Critical")
 }
 
 func ParseDeathLine(line string) (combat.Death, bool) {
@@ -157,8 +200,8 @@ func normalizeSource(source string) string {
 }
 
 func normalizeTarget(target string) string {
-	if target == "YOU" {
-		return target
+	if strings.EqualFold(target, "you") {
+		return "YOU"
 	}
 	return normalizeCombatantName(target)
 }

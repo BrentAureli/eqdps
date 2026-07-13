@@ -112,6 +112,11 @@ different mob starts a new fight.
 
 ## Development
 
+Project documentation:
+
+- [Parser recheck guide](docs/PARSER_RECHECK.md)
+- [Project context and engineering handoff](docs/PROJECT_CONTEXT.md)
+
 Run tests:
 
 ```bash
