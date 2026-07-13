@@ -54,7 +54,7 @@ func TestDamageBreakdownShowsDPSAndPercentInExpectedColumns(t *testing.T) {
 	}
 	table := tview.NewTable()
 
-	nextRow := addDamageBreakdownRows(table, 0, player, tableLayoutForWidth(100))
+	nextRow := addDamageBreakdownRows(table, 0, player, 10*time.Second, tableLayoutForWidth(100))
 	if nextRow != 1 {
 		t.Fatalf("expected one detail row, got next row %d", nextRow)
 	}
@@ -63,5 +63,32 @@ func TestDamageBreakdownShowsDPSAndPercentInExpectedColumns(t *testing.T) {
 	}
 	if got := table.GetCell(0, 6).Text; got != "40.0%" {
 		t.Fatalf("expected percentage in Last Target column, got %q", got)
+	}
+}
+
+func TestFillTableShowsExpandableMobSectionsWithSharedDPS(t *testing.T) {
+	started := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	meter := combat.NewMeter()
+	meter.Add(combat.Event{Time: started, Source: "You", Target: "Hoptor Thaggelum", Amount: 100})
+	meter.Add(combat.Event{Time: started.Add(9 * time.Second), Source: "Alice", Target: "Hoptor Thaggelum", Amount: 50})
+	sections := []combat.DisplaySection{{
+		Fight:   &combat.Fight{Mob: "Hoptor Thaggelum", Meter: meter},
+		Current: true,
+	}}
+	table := tview.NewTable()
+	expanded := make(map[string]bool)
+
+	actions := fillTable(table, sections, expanded, 100)
+	if got := table.GetCell(1, 0).Text; got != "▼ Hoptor Thaggelum" {
+		t.Fatalf("unexpected mob header: %q", got)
+	}
+	if _, ok := actions[1]; !ok {
+		t.Fatal("expected mob header to be expandable")
+	}
+	if got := table.GetCell(2, 2).Text; got != "10.00" {
+		t.Fatalf("expected You DPS over shared ten-second mob duration, got %q", got)
+	}
+	if got := table.GetCell(3, 2).Text; got != "5.00" {
+		t.Fatalf("expected Alice DPS over shared ten-second mob duration, got %q", got)
 	}
 }

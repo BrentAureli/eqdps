@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -153,16 +154,17 @@ func printText(tracker *combat.FightTracker) {
 		if index > 0 {
 			fmt.Println()
 		}
-		fmt.Println(sectionTitle(index, section))
+		fmt.Println(sectionTitle(section))
 		fmt.Printf("%-24s %10s %8s %6s %6s %8s %s\n", "Combatant", "Damage", "DPS", "Hits", "Crits", "Active", "Last Target")
+		duration := section.Fight.ActiveDuration()
 		for _, player := range section.Fight.Meter.Players() {
 			fmt.Printf("%-24s %10d %8.2f %6d %6d %8s %s\n",
 				player.Name,
 				player.Damage,
-				player.DPS(),
+				player.DPSForDuration(duration),
 				player.Hits,
 				player.Crits,
-				formatDuration(player.ActiveDuration()),
+				formatDuration(duration),
 				player.LastTarget,
 			)
 		}
@@ -418,7 +420,7 @@ func titleText(logPath string, terminalWidth int) string {
 }
 
 func statusText() string {
-	return "[gray]o[::-] history   [gray]Enter[::-] details   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
+	return "[gray]o[::-] history   [gray]Enter[::-] expand/details   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
 }
 
 func historyDuration(label string) (time.Duration, bool) {
@@ -438,31 +440,24 @@ func historyDuration(label string) (time.Duration, bool) {
 	}
 }
 
-func sectionTitle(index int, section combat.DisplaySection) string {
-	if index > 0 {
-		if section.Fight.Death.Victim != "" {
-			return fmt.Sprintf("Previous fight %d ended: %s slain by %s, %d damage events", index, section.Fight.Death.Victim, section.Fight.Death.Killer, section.Fight.Meter.Events())
-		}
-		if section.Fight.EndReason != "" {
-			return fmt.Sprintf("Previous fight %d ended: %s, %d damage events", index, section.Fight.EndReason, section.Fight.Meter.Events())
-		}
-		return fmt.Sprintf("Previous fight %d: %d damage events", index, section.Fight.Meter.Events())
-	}
+func sectionTitle(section combat.DisplaySection) string {
 	return fightTitle(section.Fight, section.Current)
 }
 
 func fightTitle(fight *combat.Fight, current bool) string {
-	status := "Last fight"
 	if current {
-		status = "Current fight"
+		return fmt.Sprintf("Active mob: %s, %d damage events", fight.Mob, fight.Meter.Events())
 	}
-	if !current && fight.Death.Victim != "" {
-		return fmt.Sprintf("%s ended: %s slain by %s, %d damage events", status, fight.Death.Victim, fight.Death.Killer, fight.Meter.Events())
+	if fight.Death.Victim != "" {
+		if sameDisplayName(fight.Death.Victim, "You") {
+			return fmt.Sprintf("Mob ended: %s; You slain by %s, %d damage events", fight.Mob, fight.Death.Killer, fight.Meter.Events())
+		}
+		return fmt.Sprintf("Mob slain: %s by %s, %d damage events", fight.Mob, fight.Death.Killer, fight.Meter.Events())
 	}
-	if !current && fight.EndReason != "" {
-		return fmt.Sprintf("%s ended: %s, %d damage events", status, fight.EndReason, fight.Meter.Events())
+	if fight.EndReason != "" {
+		return fmt.Sprintf("Mob ended: %s; %s, %d damage events", fight.Mob, fight.EndReason, fight.Meter.Events())
 	}
-	return fmt.Sprintf("%s: %d damage events", status, fight.Meter.Events())
+	return fmt.Sprintf("Mob: %s, %d damage events", fight.Mob, fight.Meter.Events())
 }
 
 func fillTable(table *tview.Table, sections []combat.DisplaySection, expandedRows map[string]bool, terminalWidth int) map[int]string {
@@ -482,7 +477,7 @@ func fillTable(table *tview.Table, sections []combat.DisplaySection, expandedRow
 
 	row := 1
 	for index, section := range sections {
-		sectionKey := sectionRowKey(index, section)
+		sectionKey := sectionRowKey(section)
 		if index > 0 {
 			for col := 1; col < len(headers); col++ {
 				table.SetCell(row, col, tableCell("", col, layout).
@@ -493,28 +488,50 @@ func fillTable(table *tview.Table, sections []combat.DisplaySection, expandedRow
 				SetTextColor(tcell.ColorGray).
 				SetSelectable(false))
 			row++
-
-			label, victim, events := previousFightCells(index, section)
-			values := []string{label, "", "", "", "", "", victim}
-			if events != "" {
-				values[1] = events
-			}
-			for col, value := range values {
-				table.SetCell(row, col, tableCell(value, col, layout).
-					SetTextColor(tcell.ColorGray).
-					SetSelectable(false))
-			}
-			row++
 		}
+
+		mobRowKey := "mob:" + sectionKey
+		expanded, seen := expandedRows[mobRowKey]
+		if !seen {
+			expanded = section.Current
+			expandedRows[mobRowKey] = expanded
+		}
+		arrow := "▶"
+		if expanded {
+			arrow = "▼"
+		}
+		duration := section.Fight.ActiveDuration()
+		values := []string{
+			arrow + " " + section.Fight.Mob,
+			fmt.Sprintf("%d events", section.Fight.Meter.Events()),
+			"",
+			"",
+			"",
+			formatDuration(duration),
+			mobStatus(section),
+		}
+		color := tcell.ColorGray
+		if section.Current {
+			color = tcell.ColorYellow
+		}
+		for col, value := range values {
+			table.SetCell(row, col, tableCell(value, col, layout).SetTextColor(color))
+		}
+		expandableRows[row] = mobRowKey
+		row++
+		if !expanded {
+			continue
+		}
+
 		for _, player := range section.Fight.Meter.Players() {
-			rowKey := sectionKey + ":" + player.Name
+			rowKey := "you:" + sectionKey + ":" + player.Name
 			values := []string{
-				player.Name,
+				"  " + player.Name,
 				fmt.Sprintf("%d", player.Damage),
-				fmt.Sprintf("%.2f", player.DPS()),
+				fmt.Sprintf("%.2f", player.DPSForDuration(duration)),
 				fmt.Sprintf("%d", player.Hits),
 				fmt.Sprintf("%d", player.Crits),
-				formatDuration(player.ActiveDuration()),
+				formatDuration(duration),
 				player.LastTarget,
 			}
 			for col, value := range values {
@@ -524,7 +541,7 @@ func fillTable(table *tview.Table, sections []combat.DisplaySection, expandedRow
 				expandableRows[row] = rowKey
 				if expandedRows[rowKey] {
 					row++
-					row = addDamageBreakdownRows(table, row, player, layout)
+					row = addDamageBreakdownRows(table, row, player, duration, layout)
 				}
 			}
 			row++
@@ -533,13 +550,12 @@ func fillTable(table *tview.Table, sections []combat.DisplaySection, expandedRow
 	return expandableRows
 }
 
-func addDamageBreakdownRows(table *tview.Table, row int, player combat.PlayerStats, layout tableLayout) int {
-	activeDuration := player.ActiveDuration()
+func addDamageBreakdownRows(table *tview.Table, row int, player combat.PlayerStats, duration time.Duration, layout tableLayout) int {
 	for _, entry := range player.DamageBreakdown() {
 		values := []string{
 			"  " + entry.Name,
 			fmt.Sprintf("%d", entry.Damage),
-			fmt.Sprintf("%.2f", damageDPS(entry.Damage, activeDuration)),
+			fmt.Sprintf("%.2f", damageDPS(entry.Damage, duration)),
 			"",
 			"",
 			"",
@@ -636,12 +652,12 @@ func clamp(value, minValue, maxValue int) int {
 	return value
 }
 
-func sectionRowKey(index int, section combat.DisplaySection) string {
+func sectionRowKey(section combat.DisplaySection) string {
 	started := time.Time{}
 	if section.Fight != nil && section.Fight.Meter != nil {
 		started = section.Fight.Meter.Started()
 	}
-	return fmt.Sprintf("%d:%s", index, started.Format(time.RFC3339))
+	return fmt.Sprintf("%s:%s", section.Fight.Mob, started.Format(time.RFC3339Nano))
 }
 
 func percent(part, total int) float64 {
@@ -659,15 +675,21 @@ func damageDPS(damage int, activeDuration time.Duration) float64 {
 	return float64(damage) / seconds
 }
 
-func previousFightCells(index int, section combat.DisplaySection) (string, string, string) {
-	label := fmt.Sprintf("Previous fight %d", index)
-	victim := ""
-	if section.Fight.Death.Victim != "" {
-		victim = fmt.Sprintf("%s slain by %s", section.Fight.Death.Victim, section.Fight.Death.Killer)
-	} else if section.Fight.EndReason != "" {
-		victim = section.Fight.EndReason
+func mobStatus(section combat.DisplaySection) string {
+	if section.Current {
+		return "active"
 	}
-	return label, victim, fmt.Sprintf("%d events", section.Fight.Meter.Events())
+	if section.Fight.Death.Victim != "" {
+		if sameDisplayName(section.Fight.Death.Victim, "You") {
+			return fmt.Sprintf("You slain by %s", section.Fight.Death.Killer)
+		}
+		return fmt.Sprintf("slain by %s", section.Fight.Death.Killer)
+	}
+	return section.Fight.EndReason
+}
+
+func sameDisplayName(left, right string) bool {
+	return strings.EqualFold(strings.TrimSpace(left), strings.TrimSpace(right))
 }
 
 func formatDuration(d time.Duration) string {

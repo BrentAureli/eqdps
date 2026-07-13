@@ -13,9 +13,9 @@ below. The code remains the source of truth if this document becomes stale.
 - TUI: `github.com/rivo/tview` over `tcell`
 - Entrypoint: root `main.go`
 
-The application tails an EverQuest log and shows the current fight, or the last
-fight when combat is inactive. It also keeps completed fight history, supports
-historical replay, and has a plain-text mode for parser comparisons.
+The application tails an EverQuest log and shows concurrent per-mob combat
+records. It keeps completed mob history, supports historical replay, and has a
+plain-text mode for parser comparisons.
 
 The primary sample corpus is `eqlog_Wyrmberg_rivervale.txt`. It is large and is
 intentionally not duplicated under `docs/`.
@@ -28,8 +28,8 @@ intentionally not duplicated under `docs/`.
 | `main_test.go` | UI layout and history-menu helper tests |
 | `internal/eqlog/parser.go` | Log envelope, damage, spell, shield, and death parsing |
 | `internal/eqlog/parser_test.go` | Exact production log format regressions |
-| `internal/combat/combat.go` | Stats, pet merging, fight lifecycle, history |
-| `internal/combat/combat_test.go` | Meter and fight-state behavior |
+| `internal/combat/combat.go` | Stats, pet merging, per-mob lifecycle, history |
+| `internal/combat/combat_test.go` | Meter and per-mob state behavior |
 | `README.md` | User-facing installation and usage |
 | `docs/PARSER_RECHECK.md` | Full-corpus parser quality audit procedure |
 
@@ -60,27 +60,28 @@ eqdps [flags] <everquest-log-file>
 | Flag | Meaning |
 | --- | --- |
 | `--text` | Print sections once instead of opening the TUI |
-| `--idle-timeout=15s` | Combat inactivity required to end a fight |
+| `--idle-timeout=15s` | Per-mob inactivity required to close a record |
 | `--back=N` | Replay the last N log minutes before live mode |
 | `--since="YYYY-MM-DD HH:MM"` | Replay from an exact log timestamp |
-| `--history=N` | Keep N completed fights; zero means unlimited |
+| `--history=N` | Keep N completed mobs; zero means unlimited |
 
 `--since` also accepts `YYYY-MM-DDTHH:MM`. Timestamps are parsed without a
 location and compared to timestamps parsed from the log in the same way.
 
 ## TUI Behavior and Constraints
 
-The layout is a one-line title/path header, the fight table, and a one-line
-status bar. Columns are Combatant, Damage, DPS, Hits, Crits, Active, and Last
-Target. Combatant and target widths adapt to terminal width and use `...` when
-truncated.
+The layout is a one-line title/path header, the mob table, and a one-line status
+bar. Columns are Combatant, Damage, DPS, Hits, Crits, Active, and Last Target.
+Combatant and target widths adapt to terminal width and use `...` when
+truncated. Active mobs are expanded by default; completed mobs start collapsed.
+There is no player-row limit and the table scrolls normally.
 
 Hotkeys:
 
 | Key | Action |
 | --- | --- |
 | `o` | History overlay: Now, 1h, 4h, 8h, 1d |
-| `Enter` | Toggle details on a `You` row |
+| `Enter` | Expand/collapse a mob section or details on its `You` row |
 | `r` | Clear the in-memory tracker |
 | `q` or `Esc` | Quit |
 
@@ -88,11 +89,12 @@ When the history overlay is open, it owns input. `Enter` selects its button and
 `Esc` closes only the overlay. After reload/reset, `resetTableView` scrolls to
 the beginning and selects row 1.
 
-Only the `You` row is expandable. Details show damage grouped by ability. Each
-detail row places ability damage under Damage, ability DPS under DPS, and its
-share of total damage under Last Target. All periodic damage is combined as
-`DoTs`; events without an ability are grouped as `Melee`; merged pet damage is
-grouped as `Pet: <pet name>`.
+Mob header rows and each mob's `You` row are expandable. Player rows under a mob
+show only events assigned to that mob. Local details show damage grouped by
+ability; each detail row places ability damage under Damage, ability DPS under
+DPS, and its share of total damage under Last Target. All periodic damage is
+combined as `DoTs`; events without an ability are grouped as `Melee`; merged
+player-pet damage is grouped as `Pet: <pet name>`.
 
 Important tview concurrency rule: background goroutines use
 `app.QueueUpdateDraw(render)`. UI event handlers call `render()` directly;
@@ -101,15 +103,17 @@ Access to the replaceable `tracker` and associated row maps is guarded by `mu`.
 
 ## Damage and DPS Model
 
-Each accepted event increments source damage and hit count. Critical events also
-increment crit count. Active duration is:
+Each accepted event is assigned to one mob record and increments its source's
+damage and hit count. Critical events also increment crit count. Mob duration is:
 
 ```text
 last event timestamp - first event timestamp + 1 second
 ```
 
-DPS is source damage divided by that active duration. Combatants remain ordered
-by first-seen timestamp, then name, so rows do not reorder on every update.
+DPS is each source's damage divided by the shared mob duration. This keeps every
+player in a mob section directly comparable even when players switch targets.
+Combatants remain ordered by first-seen timestamp, then name. There is no cap on
+the number of players in a mob record.
 
 The parser uses these local-player conventions:
 
@@ -124,7 +128,8 @@ at the beginning of a sentence does not become a second entity.
 
 Possessive names remain independent raw damage sources. During
 `Meter.Players()`, a source such as `Sobatin's warder` or ``Sobatin`s warder`` is
-merged into `Sobatin` only when `Sobatin` also appears as a source in that fight.
+merged into `Sobatin` only when `Sobatin` also appears as a source in that mob
+record.
 
 If the apparent owner is absent, the possessive entity remains separate. This
 prevents mobs such as ``Innoruuk`s Chosen`` from being truncated to `Innoruuk`.
@@ -165,7 +170,7 @@ See `docs/PARSER_RECHECK.md` before changing parser expressions. The reference
 audit on 2026-07-13 found 395,576 accepted damage events and no remaining
 source-attributable damage-like rejection in the merged sample corpus.
 
-## Fight State Machine
+## Per-Mob State Machine
 
 Important constants:
 
@@ -173,40 +178,31 @@ Important constants:
 - Death grace period: 8 seconds
 - Default history limit: 0, meaning unlimited
 
-A damage event creates the current fight. A death becomes a pending fight end
-only when the victim is the mob most recently attacked by `You`, when every
-hostile mob observed fighting `You` is dead, or when `You` dies. Damage-shield
-and damage-over-time events are passive: they identify involved hostiles but do
-not replace the active target. An incidental hit on the active mob's possessive
-pet or `<owner> pet` also leaves the owner active; EverQuest may log secondary
-or riposte damage against a pet that the player never selected. These rules
-prevent the pet's death from splitting the owner's fight. EverQuest can emit
-late damage near a death message, so a qualifying mob death is not finalized
-immediately.
+A damage event is assigned to a mob using its source and target plus learned
+player/mob roles. `You` attacking identifies the target as a mob; an entity
+attacking `YOU` identifies the source as a mob. Known roles then route group
+events where the local player is not one endpoint. Unknown events default to the
+damage target, matching the common player-to-mob form.
 
-While death is pending:
+Every mob has its own meter, pending death, wall-clock activity, and log-time
+activity. A mob death affects only that record. Damage from other mobs cannot
+split or close it. Late same-mob damage remains during the eight-second grace
+period. Local-player death closes every active record immediately. Without a
+death message, each mob closes independently after its idle timeout.
 
-- Damage involving the slain mob stays in that fight within the grace period.
-- Damage involving neither the slain source nor target finalizes the old fight
-  and starts a new one.
-- Exceeding the grace period finalizes the old fight.
-- Local-player death finalizes immediately.
+Names ending in `<owner> pet` map into the owner's mob record. A pet death is
+ignored as a boundary once the owner itself has been observed. Possessive pet
+names map to an already-active owner; unrelated possessive mob names remain
+independent.
 
-Deaths of other involved mobs are recorded but do not end the fight while the
-active target or another observed hostile remains alive.
-
-Without a death message, an idle gap finalizes the fight with reason
-`idle timeout`. Live detection measures time since the line was observed;
-historical replay measures gaps between log timestamps.
-
-`DisplaySections` shows the current/pending fight first, followed by newest
-completed fights. When there is no current fight, history index zero is shown as
-the last fight.
+`DisplaySections` shows active and pending mob records ordered by first sight,
+then completed records newest-first. A positive history limit trims only
+completed records; active mobs and players are never capped.
 
 ## History and Reloading
 
 History is stored only in memory. A positive `--history` value trims completed
-fights; zero keeps all completed fights parsed during that process.
+mob records; zero keeps all completed mobs parsed during that process.
 
 The `o` overlay replaces the tracker with a replayed tracker. Choosing `Now`
 creates an empty tracker and continues from newly appended lines. The live tail
@@ -221,6 +217,8 @@ while the existing tail continues to follow EOF.
   when replay flags are used.
 - Unlimited history can consume increasing memory during very large replays.
 - Source-less damage remains excluded because attribution is unknowable.
+- Simultaneous mobs with exactly the same log name cannot be distinguished
+  because EverQuest provides no spawn identifier; they share one active record.
 - The local character's actual name is not configured; first-person log forms
   are represented as `You` and `YOU`.
 - History replay runs synchronously from the overlay callback and may block the
@@ -235,7 +233,7 @@ while the existing tail continues to follow EOF.
 1. Read `git status --short` and preserve changes not made for the task.
 2. Read the surrounding implementation and existing tests before editing.
 3. Put exact log examples into parser tests for every new format.
-4. Add combat tests for fight lifecycle, history, ordering, or pet behavior.
+4. Add combat tests for mob lifecycle, history, ordering, or pet behavior.
 5. Use `apply_patch` for manual edits and `gofmt` afterward.
 6. Run:
 
@@ -254,12 +252,14 @@ Do not leave a generated `eqdps` binary in the repository root after checks.
 
 ## Current Product Decisions
 
-- Show the current fight; otherwise show the last fight.
-- Show mobs as rows as well as players.
+- Track and display every active mob independently.
+- Show all damage sources beneath each mob, without a player limit.
 - Keep row ordering stable by first appearance.
-- Keep history unlimited by default, with an optional cap.
-- Hide local damage details until Enter is pressed on `You`.
-- Attribute pets to an owner only when the owner is observed in the same fight.
+- Use one shared mob duration for every source's per-mob DPS.
+- Keep completed-mob history unlimited by default, with an optional cap.
+- Collapse mob sections and local damage details with Enter.
+- Attribute player pets to an owner only when the owner is observed in the same
+  mob record.
 - Favor correct attribution over counting source-less damage.
 - Keep operational UI compact for a portrait-oriented 1080p display.
 

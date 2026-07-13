@@ -2,19 +2,19 @@
 
 `eqdps` is a terminal DPS meter for EverQuest log files.
 
-It tails an EQ log, detects fights, and shows damage per combatant in a live
-terminal UI. It can also replay recent log history to compare parses or debug
-fight detection.
+It tails an EQ log, tracks every engaged mob independently, and shows per-mob
+damage in a live terminal UI. It can also replay recent log history to compare
+parses or debug combat detection.
 
 `Because I am lazy and wanted to play EverQuest Legends Open Beta, Codex did most of the work.`
 
 ## Features
 
 - Live EverQuest log tailing
-- Current fight and fight history display
-- Automatic fight endings from mob deaths, player death, and idle timeout
+- Concurrent active-mob and completed-mob history display
+- Independent mob endings from death, player death, and idle timeout
 - Player, pet, mob, spell, proc, DoT, and damage shield parsing
-- Per-fight combatant rows with damage, DPS, hits, crits, duration, and target
+- Per-mob combatant rows with damage, DPS, hits, crits, duration, and target
 - Expandable `You` row with damage breakdown by melee/spell/proc type
 - Adaptive table widths for narrow terminals
 - In-app history reload menu
@@ -56,7 +56,7 @@ new lines written after startup.
 | Key | Action |
 | --- | --- |
 | `o` | Open history menu |
-| `Enter` | Expand/collapse damage breakdown on the `You` row |
+| `Enter` | Expand/collapse a mob or the damage breakdown on its `You` row |
 | `r` | Reset the in-memory meter and start fresh |
 | `q` / `Esc` | Quit |
 
@@ -74,7 +74,7 @@ Parse from an exact log timestamp:
 eqdps --since "2026-07-06 19:22" /path/to/log.txt
 ```
 
-Show all completed fights instead of limiting history:
+Show all completed mobs instead of limiting history:
 
 ```bash
 eqdps --history=0 --since "2026-07-06 19:22" /path/to/log.txt
@@ -92,27 +92,29 @@ eqdps --text --back=30 /path/to/log.txt
 | --- | ---: | --- |
 | `--back=N` | `0` | Parse the last `N` minutes before live tailing |
 | `--since "YYYY-MM-DD HH:MM"` | empty | Parse from an absolute log timestamp |
-| `--history=N` | `0` | Completed fights to keep/show; `0` keeps all |
-| `--idle-timeout=15s` | `15s` | End current fight after no combat for this duration |
+| `--history=N` | `0` | Completed mobs to keep/show; `0` keeps all |
+| `--idle-timeout=15s` | `15s` | End each mob record after no activity for this duration |
 | `--text` | `false` | Print text output instead of opening the TUI |
 
-## Fight Detection
+## Per-Mob Combat Tracking
 
-A fight starts when a damage event is parsed.
+Each hostile mob has an independent record. Outgoing damage is assigned to its
+target; incoming damage is assigned to its hostile source. Learned player and
+mob roles handle group combat where the local player is not involved in every
+event.
 
-A fight ends when one of these happens:
+Several mobs can remain active simultaneously. AoE, riposte, damage-shield, and
+DoT events update the mob they actually affect without changing another mob's
+lifecycle. A mob's death closes only its own record. Local-player death closes
+all active mobs, and inactivity closes each idle mob independently.
 
-- the mob most recently attacked by `You` dies
-- every hostile mob involved with `You` has died
-- `You have been slain by ...` is found
-- no combat is seen for the idle timeout
+Recognizable `<owner> pet` damage is included in the owner's mob record, while a
+pet death does not close a living owner's record. Late damage from a slain mob
+remains with that mob during the eight-second death grace period.
 
-Damage shields, damage-over-time ticks, and incidental hits on the active mob's
-pet do not change the active target. This keeps a pet's death from splitting its
-owner's fight when the pet damaged `You`, triggered a damage shield, or received
-a secondary/riposte hit. If the log prints late damage from the mob that ended
-the fight immediately after its death line, `eqdps` keeps that damage in the
-completed fight. Damage involving a different mob starts a new fight.
+Every player who damages a mob appears in that mob's section; there is no player
+limit. Player DPS uses the shared mob duration so all players in a section are
+directly comparable.
 
 ## Development
 

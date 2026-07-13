@@ -50,7 +50,11 @@ func (s PlayerStats) ActiveDuration() time.Duration {
 }
 
 func (s PlayerStats) DPS() float64 {
-	seconds := s.ActiveDuration().Seconds()
+	return s.DPSForDuration(s.ActiveDuration())
+}
+
+func (s PlayerStats) DPSForDuration(duration time.Duration) float64 {
+	seconds := duration.Seconds()
 	if seconds <= 0 {
 		return 0
 	}
@@ -220,9 +224,20 @@ func damageType(event Event) string {
 }
 
 type Fight struct {
+	Mob       string
 	Meter     *Meter
 	Death     Death
 	EndReason string
+}
+
+func (f *Fight) ActiveDuration() time.Duration {
+	if f == nil || f.Meter == nil || f.Meter.Started().IsZero() || f.Meter.Ended().IsZero() {
+		return 0
+	}
+	if f.Meter.Ended().Before(f.Meter.Started()) {
+		return 0
+	}
+	return f.Meter.Ended().Sub(f.Meter.Started()) + time.Second
 }
 
 type DisplaySection struct {
@@ -230,15 +245,18 @@ type DisplaySection struct {
 	Current bool
 }
 
-type FightTracker struct {
-	current      *Meter
-	history      []*Fight
+type trackedMob struct {
+	fight        *Fight
 	pendingDeath *Death
 	lastWallSeen time.Time
+	primarySeen  bool
+}
+
+type FightTracker struct {
+	active       map[string]*trackedMob
+	history      []*Fight
 	historyLimit int
-	activeTarget string
-	hostiles     map[string]bool
-	deadHostiles map[string]bool
+	players      map[string]bool
 }
 
 func NewFightTracker() *FightTracker {
@@ -246,7 +264,11 @@ func NewFightTracker() *FightTracker {
 }
 
 func NewFightTrackerWithHistory(historyLimit int) *FightTracker {
-	return &FightTracker{historyLimit: historyLimit}
+	return &FightTracker{
+		active:       make(map[string]*trackedMob),
+		historyLimit: historyLimit,
+		players:      map[string]bool{combatantKey("You"): true},
+	}
 }
 
 func (t *FightTracker) AddDamage(event Event) {
@@ -254,149 +276,112 @@ func (t *FightTracker) AddDamage(event Event) {
 }
 
 func (t *FightTracker) AddDamageWithIdle(event Event, idleTimeout time.Duration) {
-	t.lastWallSeen = time.Now()
-	if t.pendingDeath != nil {
-		if event.Time.Sub(t.pendingDeath.Time) > deathGracePeriod {
-			t.finalizePendingDeath()
-		} else if !sameCombatant(event.Source, t.pendingDeath.Victim) && !sameCombatant(event.Target, t.pendingDeath.Victim) {
-			t.finalizePendingDeath()
-		}
+	if event.Amount <= 0 || event.Source == "" || event.Target == "" {
+		return
 	}
-	if t.current != nil && t.pendingDeath == nil && idleTimeout > 0 && event.Time.Sub(t.current.Ended()) > idleTimeout {
-		t.finalizeIdle("idle timeout")
+	t.endAtLogTime(event.Time, idleTimeout)
+
+	key, mob, mobEndpoint := t.mobForEvent(event)
+	if key == "" {
+		return
 	}
-	if t.current == nil {
-		t.current = NewMeter()
+	record := t.active[key]
+	if record == nil {
+		record = &trackedMob{fight: &Fight{Mob: mob, Meter: NewMeter()}}
+		t.active[key] = record
 	}
-	t.current.Add(event)
-	t.trackHostiles(event)
+	record.lastWallSeen = time.Now()
+	record.fight.Meter.Add(event)
+	if sameCombatant(mobEndpoint, record.fight.Mob) {
+		record.primarySeen = true
+	}
 }
 
 func (t *FightTracker) AddDeath(death Death) {
-	if t.current == nil || t.current.Events() == 0 {
+	if len(t.active) == 0 {
 		return
 	}
-	t.lastWallSeen = time.Now()
 	if sameCombatant(death.Victim, "You") {
-		t.current.ended = death.Time
-		t.pendingDeath = &death
-		t.finalizePendingDeath()
+		for _, record := range t.sortedActive() {
+			record.fight.Meter.ended = death.Time
+			record.fight.Death = death
+			t.finalize(record)
+		}
 		return
 	}
 
-	victimKey := combatantKey(death.Victim)
-	if t.hostiles[victimKey] {
-		t.deadHostiles[victimKey] = true
-	}
-	if !sameCombatant(death.Victim, t.activeTarget) && !t.allHostilesDead() {
+	key, _, aliased := t.mobIdentity(death.Victim)
+	record := t.active[key]
+	if record == nil {
 		return
 	}
-
-	t.current.ended = death.Time
-	t.pendingDeath = &death
+	if aliased && record.primarySeen {
+		return
+	}
+	record.lastWallSeen = time.Now()
+	record.fight.Meter.ended = death.Time
+	record.fight.Death = death
+	record.pendingDeath = &death
 }
 
 func (t *FightTracker) EndIdle(now time.Time, idleTimeout time.Duration) bool {
-	if idleTimeout <= 0 || t.current == nil || t.current.Events() == 0 || t.lastWallSeen.IsZero() {
-		return false
-	}
-	if t.pendingDeath != nil {
-		if now.Sub(t.lastWallSeen) >= deathGracePeriod {
-			t.finalizePendingDeath()
-			return true
+	changed := false
+	for _, record := range t.sortedActive() {
+		if record.pendingDeath != nil {
+			if now.Sub(record.lastWallSeen) >= deathGracePeriod {
+				t.finalize(record)
+				changed = true
+			}
+			continue
 		}
-		return false
+		if idleTimeout > 0 && !record.lastWallSeen.IsZero() && now.Sub(record.lastWallSeen) >= idleTimeout {
+			record.fight.EndReason = "idle timeout"
+			t.finalize(record)
+			changed = true
+		}
 	}
-	if now.Sub(t.lastWallSeen) < idleTimeout {
-		return false
-	}
-	t.finalizeIdle("idle timeout")
-	return true
+	return changed
 }
 
 func (t *FightTracker) EndIdleAtLogTime(logTime time.Time, idleTimeout time.Duration) bool {
-	if idleTimeout <= 0 || t.current == nil || t.current.Events() == 0 || logTime.IsZero() {
+	if logTime.IsZero() {
 		return false
 	}
-	if t.pendingDeath != nil {
-		if logTime.Sub(t.pendingDeath.Time) >= deathGracePeriod {
-			t.finalizePendingDeath()
-			return true
-		}
-		return false
-	}
-	if logTime.Sub(t.current.Ended()) < idleTimeout {
-		return false
-	}
-	t.finalizeIdle("idle timeout")
-	return true
+	return t.endAtLogTime(logTime, idleTimeout)
 }
 
 func (t *FightTracker) DisplayFight() (*Fight, bool) {
-	if t.pendingDeath != nil && t.current != nil && t.current.Events() > 0 {
-		return &Fight{Meter: t.current, Death: *t.pendingDeath}, false
+	sections := t.DisplaySections()
+	if len(sections) == 0 {
+		return nil, false
 	}
-	if t.current != nil && t.current.Events() > 0 {
-		return &Fight{Meter: t.current}, true
-	}
-	if len(t.history) > 0 {
-		return t.history[0], false
-	}
-	return nil, false
+	return sections[0].Fight, sections[0].Current
 }
 
 func (t *FightTracker) DisplaySections() []DisplaySection {
-	sections := make([]DisplaySection, 0, t.displayCapacity())
-	if t.pendingDeath != nil && t.current != nil && t.current.Events() > 0 {
+	active := t.sortedActive()
+	sections := make([]DisplaySection, 0, len(active)+len(t.history))
+	for _, record := range active {
 		sections = append(sections, DisplaySection{
-			Fight:   &Fight{Meter: t.current, Death: *t.pendingDeath},
-			Current: false,
-		})
-	} else if t.current != nil && t.current.Events() > 0 {
-		sections = append(sections, DisplaySection{
-			Fight:   &Fight{Meter: t.current},
-			Current: true,
+			Fight:   record.fight,
+			Current: record.pendingDeath == nil,
 		})
 	}
 
 	for _, fight := range t.history {
-		if t.historyLimit > 0 && len(sections) >= t.historyLimit+1 {
-			break
-		}
 		sections = append(sections, DisplaySection{Fight: fight})
 	}
 
 	return sections
 }
 
-func (t *FightTracker) displayCapacity() int {
-	if t.historyLimit <= 0 {
-		return len(t.history) + 1
-	}
-	return t.historyLimit + 1
-}
-
-func (t *FightTracker) finalizePendingDeath() {
-	if t.pendingDeath == nil || t.current == nil || t.current.Events() == 0 {
-		t.pendingDeath = nil
+func (t *FightTracker) finalize(record *trackedMob) {
+	if record == nil || record.fight == nil || record.fight.Meter.Events() == 0 {
 		return
 	}
-	t.history = append([]*Fight{{Meter: t.current, Death: *t.pendingDeath}}, t.history...)
+	delete(t.active, combatantKey(record.fight.Mob))
+	t.history = append([]*Fight{record.fight}, t.history...)
 	t.trimHistory()
-	t.current = nil
-	t.pendingDeath = nil
-	t.resetEncounterState()
-}
-
-func (t *FightTracker) finalizeIdle(reason string) {
-	if t.current == nil || t.current.Events() == 0 {
-		return
-	}
-	t.history = append([]*Fight{{Meter: t.current, EndReason: reason}}, t.history...)
-	t.trimHistory()
-	t.current = nil
-	t.pendingDeath = nil
-	t.resetEncounterState()
 }
 
 func (t *FightTracker) trimHistory() {
@@ -413,68 +398,94 @@ func combatantKey(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
 }
 
-func (t *FightTracker) trackHostiles(event Event) {
-	if event.Amount <= 0 || event.Source == "" {
-		return
-	}
-	if sameCombatant(event.Source, "You") && !sameCombatant(event.Target, "You") {
-		t.addHostile(event.Target)
-		if !event.Passive && !t.isActiveTargetsPet(event.Target) {
-			t.activeTarget = event.Target
+func (t *FightTracker) endAtLogTime(logTime time.Time, idleTimeout time.Duration) bool {
+	changed := false
+	for _, record := range t.sortedActive() {
+		if record.pendingDeath != nil {
+			if logTime.Sub(record.pendingDeath.Time) >= deathGracePeriod {
+				t.finalize(record)
+				changed = true
+			}
+			continue
+		}
+		if idleTimeout > 0 && logTime.Sub(record.fight.Meter.Ended()) >= idleTimeout {
+			record.fight.EndReason = "idle timeout"
+			t.finalize(record)
+			changed = true
 		}
 	}
-	if sameCombatant(event.Target, "You") && !sameCombatant(event.Source, "You") {
-		t.addHostile(event.Source)
-	}
+	return changed
 }
 
-func (t *FightTracker) isActiveTargetsPet(target string) bool {
-	owner, ok := apparentPetOwner(target)
-	if !ok || !sameCombatant(owner, t.activeTarget) {
-		return false
+func (t *FightTracker) sortedActive() []*trackedMob {
+	records := make([]*trackedMob, 0, len(t.active))
+	for _, record := range t.active {
+		records = append(records, record)
 	}
-	return !t.deadHostiles[combatantKey(owner)]
+	sort.Slice(records, func(i, j int) bool {
+		left := records[i].fight.Meter.Started()
+		right := records[j].fight.Meter.Started()
+		if left.Equal(right) {
+			return records[i].fight.Mob < records[j].fight.Mob
+		}
+		return left.Before(right)
+	})
+	return records
 }
 
-func apparentPetOwner(name string) (string, bool) {
+func (t *FightTracker) mobForEvent(event Event) (string, string, string) {
+	sourceKey, _, _ := t.mobIdentity(event.Source)
+	targetKey, _, _ := t.mobIdentity(event.Target)
+	sourceIsMob := t.active[sourceKey] != nil
+	targetIsMob := t.active[targetKey] != nil
+	sourceIsPlayer := t.players[combatantKey(event.Source)]
+	targetIsPlayer := t.players[combatantKey(event.Target)]
+
+	mobEndpoint := event.Target
+	switch {
+	case sameCombatant(event.Target, "You"):
+		mobEndpoint = event.Source
+	case sameCombatant(event.Source, "You"):
+		mobEndpoint = event.Target
+	case sourceIsMob && !targetIsMob:
+		mobEndpoint = event.Source
+	case targetIsMob:
+		mobEndpoint = event.Target
+	case sourceIsPlayer && !targetIsPlayer:
+		mobEndpoint = event.Target
+	case targetIsPlayer:
+		mobEndpoint = event.Source
+	}
+
+	key, mob, _ := t.mobIdentity(mobEndpoint)
+	if sameCombatant(mobEndpoint, event.Source) {
+		if !targetIsMob {
+			t.players[combatantKey(event.Target)] = true
+		}
+	} else if !sourceIsMob {
+		t.players[combatantKey(event.Source)] = true
+	}
+	return key, mob, mobEndpoint
+}
+
+func (t *FightTracker) mobIdentity(name string) (string, string, bool) {
 	trimmed := strings.TrimSpace(name)
-	if owner, _, ok := possessiveOwner(trimmed); ok {
-		return owner, true
+	if trimmed == "" || sameCombatant(trimmed, "You") {
+		return "", "", false
 	}
-	if len(trimmed) > len(" pet") && strings.EqualFold(trimmed[len(trimmed)-len(" pet"):], " pet") {
-		return strings.TrimSpace(trimmed[:len(trimmed)-len(" pet")]), true
+	if owner, ok := petSuffixOwner(trimmed); ok {
+		return combatantKey(owner), owner, true
 	}
-	return "", false
+	if owner, _, ok := possessiveOwner(trimmed); ok && t.active[combatantKey(owner)] != nil {
+		return combatantKey(owner), owner, true
+	}
+	return combatantKey(trimmed), trimmed, false
 }
 
-func (t *FightTracker) addHostile(name string) {
-	key := combatantKey(name)
-	if key == "" {
-		return
+func petSuffixOwner(name string) (string, bool) {
+	trimmed := strings.TrimSpace(name)
+	if len(trimmed) <= len(" pet") || !strings.EqualFold(trimmed[len(trimmed)-len(" pet"):], " pet") {
+		return "", false
 	}
-	if t.hostiles == nil {
-		t.hostiles = make(map[string]bool)
-	}
-	if t.deadHostiles == nil {
-		t.deadHostiles = make(map[string]bool)
-	}
-	t.hostiles[key] = true
-}
-
-func (t *FightTracker) allHostilesDead() bool {
-	if len(t.hostiles) == 0 {
-		return false
-	}
-	for hostile := range t.hostiles {
-		if !t.deadHostiles[hostile] {
-			return false
-		}
-	}
-	return true
-}
-
-func (t *FightTracker) resetEncounterState() {
-	t.activeTarget = ""
-	t.hostiles = nil
-	t.deadHostiles = nil
+	return strings.TrimSpace(trimmed[:len(trimmed)-len(" pet")]), true
 }
