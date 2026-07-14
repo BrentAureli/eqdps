@@ -26,6 +26,7 @@ var (
 	slainByRE    = regexp.MustCompile(`^(.+) has been slain by (.+)!$`)
 	experienceRE = regexp.MustCompile(`^You gain experience! \(([0-9]+(?:\.[0-9]+)?)%\)$`)
 	levelUpRE    = regexp.MustCompile(`^You have gained a level! Welcome to level ([0-9]+)!$`)
+	aggroClearRE = regexp.MustCompile(`^Your enemies have forgotten you!$`)
 )
 
 type ExperienceGain struct {
@@ -204,6 +205,14 @@ func ParseLevelUpLine(line string) (LevelUp, bool) {
 		return LevelUp{}, false
 	}
 	return LevelUp{Time: timestamp, Level: level}, true
+}
+
+func ParseAggroClearLine(line string) (time.Time, bool) {
+	timestamp, message, ok := parseEnvelope(line)
+	if !ok || !aggroClearRE.MatchString(message) {
+		return time.Time{}, false
+	}
+	return timestamp, true
 }
 
 func ParseTime(line string) (time.Time, bool) {

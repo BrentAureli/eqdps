@@ -154,16 +154,74 @@ func TestFightTrackerAOStrikesDoNotChangeAnotherMobsLifecycle(t *testing.T) {
 	}
 }
 
-func TestFightTrackerKeepsLateDamageWithSlainMob(t *testing.T) {
+func TestFightTrackerKeepsSameTimestampDamageWithSlainMob(t *testing.T) {
 	tracker := NewFightTracker()
 	now := time.Date(2026, 7, 5, 17, 22, 20, 0, time.UTC)
 	tracker.AddDamage(Event{Time: now, Source: "You", Target: "a rock golem", Amount: 10})
 	tracker.AddDeath(Death{Time: now.Add(time.Second), Victim: "a rock golem", Killer: "You"})
-	tracker.AddDamage(Event{Time: now.Add(2 * time.Second), Source: "a rock golem", Target: "YOU", Amount: 20})
+	tracker.AddDamage(Event{Time: now.Add(time.Second), Source: "a rock golem", Target: "YOU", Amount: 20})
 
 	fight, current := tracker.DisplayFight()
 	if fight == nil || current || fight.Meter.Events() != 2 {
-		t.Fatalf("expected late damage in pending mob record, got fight=%#v current=%v", fight, current)
+		t.Fatalf("expected same-timestamp damage in pending mob record, got fight=%#v current=%v", fight, current)
+	}
+}
+
+func TestFightTrackerBuffersDotUntilDeathGraceExpires(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 5, 17, 22, 20, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "a rock golem", Amount: 10})
+	tracker.AddDeath(Death{Time: now.Add(time.Second), Victim: "a rock golem", Killer: "You"})
+	tracker.AddDamage(Event{Time: now.Add(4 * time.Second), Source: "You", Target: "a rock golem", Amount: 20, DamageOverTime: true})
+
+	fight, current := tracker.DisplayFight()
+	if fight == nil || current || fight.Meter.Events() != 1 {
+		t.Fatalf("expected DoT to remain buffered, got fight=%#v current=%v", fight, current)
+	}
+	tracker.EndIdleAtLogTime(now.Add(10*time.Second), DefaultIdleTimeout)
+	fight, current = tracker.DisplayFight()
+	if fight == nil || current || fight.Meter.Events() != 2 {
+		t.Fatalf("expected buffered DoT in completed old mob, got fight=%#v current=%v", fight, current)
+	}
+}
+
+func TestFightTrackerMovesBufferedDotsToConfirmedSameNameMob(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 5, 17, 22, 20, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "a rock golem", Amount: 10})
+	tracker.AddDeath(Death{Time: now.Add(time.Second), Victim: "a rock golem", Killer: "You"})
+	tracker.AddDamage(Event{Time: now.Add(4 * time.Second), Source: "You", Target: "a rock golem", Amount: 20, DamageOverTime: true})
+	tracker.AddDamage(Event{Time: now.Add(5 * time.Second), Source: "a rock golem", Target: "YOU", Amount: 30})
+
+	sections := tracker.DisplaySections()
+	if len(sections) != 2 {
+		t.Fatalf("expected new active mob and completed old mob, got %#v", sections)
+	}
+	if !sections[0].Current || sections[0].Fight.Meter.Events() != 2 {
+		t.Fatalf("expected buffered DoT and confirming hit in new mob, got %#v", sections[0])
+	}
+	if sections[1].Current || sections[1].Fight.Meter.Events() != 1 {
+		t.Fatalf("expected only original hit in dead mob, got %#v", sections[1])
+	}
+}
+
+func TestFightTrackerSecondSameNameDeathConfirmsBufferedMob(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 5, 17, 22, 20, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "a rock golem", Amount: 10})
+	tracker.AddDeath(Death{Time: now.Add(time.Second), Victim: "a rock golem", Killer: "You"})
+	tracker.AddDamage(Event{Time: now.Add(4 * time.Second), Source: "You", Target: "a rock golem", Amount: 20, DamageOverTime: true})
+	tracker.AddDeath(Death{Time: now.Add(5 * time.Second), Victim: "a rock golem", Killer: "You"})
+
+	sections := tracker.DisplaySections()
+	if len(sections) != 2 || sections[0].Current || sections[0].Fight.Meter.Events() != 1 {
+		t.Fatalf("expected buffered event in second pending mob, got %#v", sections)
+	}
+	if sections[0].Fight.Death.Time != now.Add(5*time.Second) {
+		t.Fatalf("expected second death on successor, got %#v", sections[0].Fight.Death)
+	}
+	if sections[1].Fight.Meter.Events() != 1 || sections[1].Fight.Death.Time != now.Add(time.Second) {
+		t.Fatalf("expected first completed mob unchanged, got %#v", sections[1])
 	}
 }
 
@@ -177,6 +235,67 @@ func TestFightTrackerPlayerDeathClosesEveryActiveMob(t *testing.T) {
 	sections := tracker.DisplaySections()
 	if len(sections) != 2 || sections[0].Current || sections[1].Current {
 		t.Fatalf("expected two completed mob records: %#v", sections)
+	}
+}
+
+func TestFightTrackerForgetEnemiesClosesEveryActiveMob(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 13, 14, 55, 0, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "first mob", Amount: 10})
+	tracker.AddDamage(Event{Time: now.Add(time.Second), Source: "second mob", Target: "YOU", Amount: 20})
+	tracker.ForgetEnemies(now.Add(5 * time.Second))
+
+	sections := tracker.DisplaySections()
+	if len(sections) != 2 || sections[0].Current || sections[1].Current {
+		t.Fatalf("expected every mob to close on aggro clear, got %#v", sections)
+	}
+	for _, section := range sections {
+		if section.Fight.EndReason != "enemies forgot you" {
+			t.Fatalf("unexpected end reason: %#v", section.Fight)
+		}
+	}
+}
+
+func TestFightTrackerForgottenDotsUpdateClosedFightWithRollingExpiry(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 13, 14, 55, 0, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "a necro neophyte", Target: "YOU", Amount: 10})
+	tracker.ForgetEnemies(now.Add(time.Second))
+	tracker.AddDamage(Event{Time: now.Add(7 * time.Second), Source: "a necro neophyte", Target: "YOU", Amount: 2, DamageOverTime: true})
+	tracker.AddDamage(Event{Time: now.Add(13 * time.Second), Source: "a necro neophyte", Target: "YOU", Amount: 2, DamageOverTime: true})
+
+	sections := tracker.DisplaySections()
+	if len(sections) != 1 || sections[0].Current || sections[0].Fight.Meter.Events() != 3 {
+		t.Fatalf("expected rolling DoTs in forgotten fight, got %#v", sections)
+	}
+}
+
+func TestFightTrackerNonDotAfterForgetStartsNewFight(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 13, 14, 55, 0, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "a necro neophyte", Target: "YOU", Amount: 10})
+	tracker.ForgetEnemies(now.Add(time.Second))
+	tracker.AddDamage(Event{Time: now.Add(4 * time.Second), Source: "a necro neophyte", Target: "YOU", Amount: 3})
+
+	sections := tracker.DisplaySections()
+	if len(sections) != 2 || !sections[0].Current || sections[0].Fight.Meter.Events() != 1 {
+		t.Fatalf("expected non-DoT to create a new fight, got %#v", sections)
+	}
+	if sections[1].Current || sections[1].Fight.Meter.Events() != 1 {
+		t.Fatalf("expected forgotten fight to remain completed, got %#v", sections[1])
+	}
+}
+
+func TestFightTrackerDotAfterForgottenRetentionStartsNewFight(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 13, 14, 55, 0, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "a necro neophyte", Target: "YOU", Amount: 10})
+	tracker.ForgetEnemies(now.Add(time.Second))
+	tracker.AddDamage(Event{Time: now.Add(10 * time.Second), Source: "a necro neophyte", Target: "YOU", Amount: 2, DamageOverTime: true})
+
+	sections := tracker.DisplaySections()
+	if len(sections) != 2 || !sections[0].Current || sections[0].Fight.Meter.Events() != 1 {
+		t.Fatalf("expected expired DoT to create a new fight, got %#v", sections)
 	}
 }
 

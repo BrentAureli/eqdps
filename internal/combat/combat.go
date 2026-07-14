@@ -248,8 +248,15 @@ type DisplaySection struct {
 type trackedMob struct {
 	fight        *Fight
 	pendingDeath *Death
+	buffered     []Event
 	lastWallSeen time.Time
 	primarySeen  bool
+}
+
+type forgottenMob struct {
+	fight    *Fight
+	lastLog  time.Time
+	lastWall time.Time
 }
 
 type FightTracker struct {
@@ -257,6 +264,7 @@ type FightTracker struct {
 	history      []*Fight
 	historyLimit int
 	players      map[string]bool
+	forgotten    map[string]*forgottenMob
 }
 
 func NewFightTracker() *FightTracker {
@@ -268,6 +276,7 @@ func NewFightTrackerWithHistory(historyLimit int) *FightTracker {
 		active:       make(map[string]*trackedMob),
 		historyLimit: historyLimit,
 		players:      map[string]bool{combatantKey("You"): true},
+		forgotten:    make(map[string]*forgottenMob),
 	}
 }
 
@@ -286,10 +295,62 @@ func (t *FightTracker) AddDamageWithIdle(event Event, idleTimeout time.Duration)
 		return
 	}
 	record := t.active[key]
+	if record != nil && record.pendingDeath != nil {
+		switch {
+		case !event.Time.After(record.pendingDeath.Time):
+			t.addEvent(record, event, mobEndpoint)
+			return
+		case event.DamageOverTime:
+			record.buffered = append(record.buffered, event)
+			return
+		default:
+			buffered := append([]Event(nil), record.buffered...)
+			record.buffered = nil
+			t.finalize(record)
+			record = &trackedMob{fight: &Fight{Mob: mob, Meter: NewMeter()}}
+			t.active[key] = record
+			for _, bufferedEvent := range buffered {
+				t.addEvent(record, bufferedEvent, mobEndpointFor(bufferedEvent, record.fight.Mob))
+			}
+		}
+	}
 	if record == nil {
+		if forgotten := t.forgotten[key]; forgotten != nil {
+			if event.DamageOverTime {
+				forgotten.fight.Meter.Add(event)
+				forgotten.lastLog = event.Time
+				forgotten.lastWall = time.Now()
+				return
+			}
+			delete(t.forgotten, key)
+		}
 		record = &trackedMob{fight: &Fight{Mob: mob, Meter: NewMeter()}}
 		t.active[key] = record
 	}
+	t.addEvent(record, event, mobEndpoint)
+}
+
+func (t *FightTracker) ForgetEnemies(timestamp time.Time) {
+	if timestamp.IsZero() {
+		return
+	}
+	now := time.Now()
+	for _, record := range t.sortedActive() {
+		if record.fight.Death.Victim == "" {
+			record.fight.EndReason = "enemies forgot you"
+		}
+		record.fight.Meter.ended = timestamp
+		key := combatantKey(record.fight.Mob)
+		t.finalize(record)
+		t.forgotten[key] = &forgottenMob{
+			fight:    record.fight,
+			lastLog:  timestamp,
+			lastWall: now,
+		}
+	}
+}
+
+func (t *FightTracker) addEvent(record *trackedMob, event Event, mobEndpoint string) {
 	record.lastWallSeen = time.Now()
 	record.fight.Meter.Add(event)
 	if sameCombatant(mobEndpoint, record.fight.Mob) {
@@ -318,6 +379,20 @@ func (t *FightTracker) AddDeath(death Death) {
 	if aliased && record.primarySeen {
 		return
 	}
+	if record.pendingDeath != nil {
+		buffered := append([]Event(nil), record.buffered...)
+		record.buffered = nil
+		mob := record.fight.Mob
+		t.finalize(record)
+		if len(buffered) == 0 {
+			return
+		}
+		record = &trackedMob{fight: &Fight{Mob: mob, Meter: NewMeter()}}
+		t.active[key] = record
+		for _, event := range buffered {
+			t.addEvent(record, event, mobEndpointFor(event, mob))
+		}
+	}
 	record.lastWallSeen = time.Now()
 	record.fight.Meter.ended = death.Time
 	record.fight.Death = death
@@ -325,6 +400,7 @@ func (t *FightTracker) AddDeath(death Death) {
 }
 
 func (t *FightTracker) EndIdle(now time.Time, idleTimeout time.Duration) bool {
+	t.expireForgottenAtWall(now)
 	changed := false
 	for _, record := range t.sortedActive() {
 		if record.pendingDeath != nil {
@@ -379,6 +455,10 @@ func (t *FightTracker) finalize(record *trackedMob) {
 	if record == nil || record.fight == nil || record.fight.Meter.Events() == 0 {
 		return
 	}
+	for _, event := range record.buffered {
+		record.fight.Meter.Add(event)
+	}
+	record.buffered = nil
 	delete(t.active, combatantKey(record.fight.Mob))
 	t.history = append([]*Fight{record.fight}, t.history...)
 	t.trimHistory()
@@ -399,6 +479,7 @@ func combatantKey(name string) string {
 }
 
 func (t *FightTracker) endAtLogTime(logTime time.Time, idleTimeout time.Duration) bool {
+	t.expireForgottenAtLogTime(logTime)
 	changed := false
 	for _, record := range t.sortedActive() {
 		if record.pendingDeath != nil {
@@ -415,6 +496,32 @@ func (t *FightTracker) endAtLogTime(logTime time.Time, idleTimeout time.Duration
 		}
 	}
 	return changed
+}
+
+func (t *FightTracker) expireForgottenAtLogTime(logTime time.Time) {
+	for key, record := range t.forgotten {
+		if logTime.Sub(record.lastLog) >= deathGracePeriod {
+			delete(t.forgotten, key)
+		}
+	}
+}
+
+func (t *FightTracker) expireForgottenAtWall(now time.Time) {
+	for key, record := range t.forgotten {
+		if now.Sub(record.lastWall) >= deathGracePeriod {
+			delete(t.forgotten, key)
+		}
+	}
+}
+
+func mobEndpointFor(event Event, mob string) string {
+	if sameCombatant(event.Source, mob) {
+		return event.Source
+	}
+	if sameCombatant(event.Target, mob) {
+		return event.Target
+	}
+	return ""
 }
 
 func (t *FightTracker) sortedActive() []*trackedMob {

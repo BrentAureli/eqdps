@@ -39,7 +39,7 @@ intentionally not duplicated under `docs/`.
 
 ```text
 log line
-  -> eqlog.ParseLine / ParseDeathLine / ParseExperienceLine
+  -> eqlog damage/death/XP/level-up/aggro-clear parsers
   -> main.processLine
   -> combat.FightTracker / xp.Session
   -> combat.Meter / XP snapshot
@@ -215,10 +215,22 @@ events where the local player is not one endpoint. Unknown events default to the
 damage target, matching the common player-to-mob form.
 
 Every mob has its own meter, pending death, wall-clock activity, and log-time
-activity. A mob death affects only that record. Damage from other mobs cannot
-split or close it. Late same-mob damage remains during the eight-second grace
-period. Local-player death closes every active record immediately. Without a
-death message, each mob closes independently after its idle timeout.
+activity. A mob death affects only that record. Damage from other mob names
+cannot split or close it. Same-timestamp damage remains with a dead mob. Later
+same-name DoTs are buffered during the eight-second grace period. A later
+non-DoT confirms a new same-name mob, finalizes the old record, and moves the
+buffered DoTs into the successor. Without confirmation, the buffered events
+return to the old record when grace expires. A second same-name death also
+confirms a buffered successor. Local-player death closes every active record
+immediately. Without a death message, each mob closes independently after its
+idle timeout.
+
+The exact `Your enemies have forgotten you!` message closes every active record
+with reason `enemies forgot you`. Each closed record remains in a per-name
+forgotten registry for eight seconds. Attributable DoTs update that completed
+fight and renew its log-time and wall-time retention window. A non-DoT event
+deletes the forgotten association and creates a new fight. This prevents a DoT
+left on the local player after Feign Death from reopening combat.
 
 Names ending in `<owner> pet` map into the owner's mob record. A pet death is
 ignored as a boundary once the owner itself has been observed. Possessive pet
@@ -249,8 +261,9 @@ history once, while the existing tail continues to follow EOF.
   EverQuest does not include the raw XP total in these log lines.
 - Unlimited history can consume increasing memory during very large replays.
 - Source-less damage remains excluded because attribution is unknowable.
-- Simultaneous mobs with exactly the same log name cannot be distinguished
-  because EverQuest provides no spawn identifier; they share one active record.
+- Simultaneous living mobs with exactly the same log name share one active
+  record because EverQuest provides no spawn identifier. Death buffering can
+  separate the successor only once a death supplies a boundary.
 - The local character's actual name is not configured; first-person log forms
   are represented as `You` and `YOU`.
 - History replay runs synchronously from the overlay callback and may block the

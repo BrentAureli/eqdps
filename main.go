@@ -397,6 +397,10 @@ func processLine(line string, tracker *combat.FightTracker, xpSession *xp.Sessio
 		xpSession.AddLevelUp(levelUp.Time)
 		return
 	}
+	if timestamp, ok := eqlog.ParseAggroClearLine(line); ok {
+		tracker.ForgetEnemies(timestamp)
+		return
+	}
 	if death, ok := eqlog.ParseDeathLine(line); ok {
 		tracker.AddDeath(death)
 	}

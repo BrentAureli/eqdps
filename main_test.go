@@ -90,6 +90,18 @@ func TestProcessLineUpdatesCombatAndXPTrackers(t *testing.T) {
 	}
 }
 
+func TestProcessLineClosesCombatWhenEnemiesForgetYou(t *testing.T) {
+	combatTracker := combat.NewFightTracker()
+	xpSession := xp.NewSession()
+	processLine("[Mon Jul 13 14:56:40 2026] A lava guardian hits YOU for 20 points of damage.", combatTracker, xpSession, combat.DefaultIdleTimeout)
+	processLine("[Mon Jul 13 14:56:50 2026] Your enemies have forgotten you!", combatTracker, xpSession, combat.DefaultIdleTimeout)
+
+	fight, current := combatTracker.DisplayFight()
+	if fight == nil || current || fight.EndReason != "enemies forgot you" {
+		t.Fatalf("expected aggro clear to close fight, got fight=%#v current=%v", fight, current)
+	}
+}
+
 func TestDamageBreakdownShowsDPSAndPercentInExpectedColumns(t *testing.T) {
 	started := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	player := combat.PlayerStats{

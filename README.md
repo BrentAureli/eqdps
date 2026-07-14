@@ -8,6 +8,8 @@ parses or debug combat detection.
 
 `Because I am lazy and wanted to play EverQuest Legends Open Beta, Codex did most of the work.`
 
+![eqdps terminal interface](img/Screenshot-2026-07-14_07-31-44.png)
+
 ## Features
 
 - Live EverQuest log tailing
@@ -127,9 +129,16 @@ DoT events update the mob they actually affect without changing another mob's
 lifecycle. A mob's death closes only its own record. Local-player death closes
 all active mobs, and inactivity closes each idle mob independently.
 
+`Your enemies have forgotten you!` closes every visible fight immediately.
+Those completed records remain available for attributable lingering DoTs. Each
+DoT tick renews an eight-second retention window without reopening combat; a
+later non-DoT event involving that mob starts a new fight immediately.
+
 Recognizable `<owner> pet` damage is included in the owner's mob record, while a
-pet death does not close a living owner's record. Late damage from a slain mob
-remains with that mob during the eight-second death grace period.
+pet death does not close a living owner's record. Damage at the same timestamp
+as a mob's death remains with that mob. Later same-name DoTs are buffered for up
+to eight seconds: a later non-DoT confirms a new spawn and receives the buffered
+DoTs; otherwise they return to the completed mob when the grace period expires.
 
 Every player who damages a mob appears in that mob's section; there is no player
 limit. Player DPS uses the shared mob duration so all players in a section are

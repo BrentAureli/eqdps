@@ -279,3 +279,14 @@ func TestParseLevelUpLine(t *testing.T) {
 		t.Fatalf("expected timestamp %s, got %s", want, levelUp.Time)
 	}
 }
+
+func TestParseAggroClearLine(t *testing.T) {
+	want := time.Date(2026, 7, 13, 14, 56, 50, 0, time.UTC)
+	got, ok := ParseAggroClearLine("[Mon Jul 13 14:56:50 2026] Your enemies have forgotten you!")
+	if !ok {
+		t.Fatal("expected aggro-clear event")
+	}
+	if !got.Equal(want) {
+		t.Fatalf("expected timestamp %s, got %s", want, got)
+	}
+}
