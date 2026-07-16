@@ -337,6 +337,12 @@ func (p *PersistentTracker) ReadyQuests() []QuestProgress {
 	return p.tracker.ReadyQuests()
 }
 
+func (p *PersistentTracker) QuestProgress() []QuestProgress {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.tracker.QuestProgress()
+}
+
 func loadState(path string, state *CharacterState) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {

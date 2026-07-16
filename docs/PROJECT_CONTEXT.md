@@ -103,6 +103,7 @@ Hotkeys:
 | Key | Action |
 | --- | --- |
 | `o` | History overlay: Now, 1h, 4h, 8h, 1d, Full |
+| `p` | Plane of Sky quest tracker |
 | `/` | Filter displayed fights by case-insensitive mob-name substring |
 | `Enter` | Expand/collapse a mob, combatant, or detail category |
 | `a` | Fully expand or collapse the selected subtree |
@@ -180,11 +181,16 @@ first-line fingerprint and file-size check reject unsafe automatic recovery
 after log replacement or truncation. Combat `--back`, `--since`, and history
 reloads never mutate Sky holdings.
 
+Press `p` to open the read-only quest tracker. It lists quests by class, puts
+quests with every required item in a ready-to-turn-in section, and shows owned
+and required quantities plus known source hints and rewards. `Enter` expands a
+class or quest, `a` expands or collapses everything, and `p` or `Esc` returns to
+the combat view.
+
 The state is an evidence-based estimate rather than an authoritative EverQuest
 inventory snapshot. Logged destruction is handled, but trades, quest turn-ins,
 actions while logging is disabled, and other unobserved removals still require
-future reconciliation. Reward/turn-in detection and the holdings/ready-quest
-TUI are not implemented yet.
+future reconciliation. Reward/turn-in detection is not implemented yet.
 
 ## Damage and DPS Model
 

@@ -265,6 +265,8 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	expandableRows := make(map[int]string)
 	terminalWidth := 100
 	fightFilter := ""
+	skyViewOpen := false
+	var renderSkyView = func() {}
 	skyStartOffset := int64(0)
 	if skyTracker != nil {
 		skyStartOffset = skyTracker.Offset()
@@ -303,6 +305,9 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		header.SetText(titleText(logPath, terminalWidth))
 		status.SetText(statusText(xpSession.SnapshotLive(time.Now()), fightFilter))
 		expandableRows = fillTable(table, sections, expandedRows, terminalWidth)
+		if skyViewOpen {
+			renderSkyView()
+		}
 	}
 	render()
 
@@ -368,6 +373,31 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		AddItem(status, 1, 0, false)
 	pages := tview.NewPages().
 		AddPage("main", layout, true, true)
+	skyTable := tview.NewTable().SetBorders(false).SetSelectable(true, false).SetFixed(1, 0)
+	skyHeader := tview.NewTextView().SetDynamicColors(true)
+	skyFooter := tview.NewTextView().SetDynamicColors(true).
+		SetText("[gray]Enter[::-] details   [gray]a[::-] toggle all   [gray]p/Esc[::-] close")
+	skyExpanded := make(map[string]bool)
+	skyExpandableRows := make(map[int]string)
+	character, server, _ := skyquest.CharacterIdentity(logPath)
+	renderSkyView = func() {
+		skyMu.Lock()
+		active := skyTracker
+		if active == nil {
+			skyMu.Unlock()
+			return
+		}
+		progress := active.QuestProgress()
+		inventory := active.Inventory()
+		skyMu.Unlock()
+		skyHeader.SetText(fmt.Sprintf("[::b]Plane of Sky Quest Tracker[::-]  %s / %s", character, server))
+		skyExpandableRows = fillSkyQuestTable(skyTable, progress, inventory, skyExpanded)
+	}
+	skyLayout := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(skyHeader, 1, 0, false).
+		AddItem(skyTable, 0, 1, true).
+		AddItem(skyFooter, 1, 0, false)
 	skySetupOpen := false
 	skyScanOpen := false
 	var skyScanCancel chan struct{}
@@ -377,6 +407,27 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	replayOpen := false
 	var replayCancel chan struct{}
 	var replayView *tview.TextView
+
+	openSkyView := func() {
+		skyMu.Lock()
+		enabled := skyTracker != nil
+		skyMu.Unlock()
+		if !enabled {
+			return
+		}
+		skyViewOpen = true
+		renderSkyView()
+		pages.AddPage("sky-view", skyLayout, true, true)
+		app.SetFocus(skyTable)
+		skyTable.ScrollToBeginning()
+		skyTable.Select(1, 0)
+	}
+
+	closeSkyView := func() {
+		pages.RemovePage("sky-view")
+		skyViewOpen = false
+		app.SetFocus(table)
+	}
 
 	closeSkySetup := func() {
 		pages.RemovePage("sky-setup")
@@ -424,6 +475,7 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 				scanErr = created.SyncLog(logPath)
 				if scanErr == nil {
 					skyTracker = created
+					skyNeedsSetup = false
 				}
 				skyMu.Unlock()
 			}
@@ -637,6 +689,37 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		if skySetupOpen {
 			return event
 		}
+		if skyViewOpen {
+			if event.Key() == tcell.KeyEsc {
+				closeSkyView()
+				return nil
+			}
+			if event.Key() == tcell.KeyEnter {
+				row, _ := skyTable.GetSelection()
+				if key, ok := skyExpandableRows[row]; ok {
+					skyExpanded[key] = !skyExpanded[key]
+					renderSkyView()
+				}
+				return nil
+			}
+			switch event.Rune() {
+			case 'p', 'P':
+				closeSkyView()
+				return nil
+			case 'a', 'A':
+				skyMu.Lock()
+				active := skyTracker
+				var progress []skyquest.QuestProgress
+				if active != nil {
+					progress = active.QuestProgress()
+				}
+				skyMu.Unlock()
+				toggleSkyQuestTree(progress, skyExpanded)
+				renderSkyView()
+				return nil
+			}
+			return nil
+		}
 		if replayOpen {
 			if event.Key() == tcell.KeyEsc {
 				if replayCancel != nil {
@@ -716,6 +799,16 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 			return nil
 		case '/':
 			openFilter()
+			return nil
+		case 'p', 'P':
+			skyMu.Lock()
+			enabled := skyTracker != nil
+			skyMu.Unlock()
+			if enabled {
+				openSkyView()
+			} else if !skySetupOpen && !skyScanOpen {
+				showSkySetup()
+			}
 			return nil
 		}
 		return event
@@ -842,7 +935,7 @@ func titleText(logPath string, terminalWidth int) string {
 }
 
 func statusText(snapshot xp.Snapshot, fightFilter string) string {
-	controls := "[gray]o[::-] history   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] toggle tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
+	controls := "[gray]o[::-] history   [gray]p[::-] Sky quests   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] toggle tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
 	if fightFilter != "" {
 		controls = fmt.Sprintf("[yellow]filter: %s[::-]   %s", tview.Escape(fightFilter), controls)
 	}
@@ -996,6 +1089,152 @@ func showProgressOverlay(app *tview.Application, pages *tview.Pages, page, title
 	pages.AddPage(page, centeredView(view, 68, 9), true, true)
 	app.SetFocus(view)
 	return view
+}
+
+func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, inventory map[string]int, expanded map[string]bool) map[int]string {
+	table.Clear()
+	headers := []string{"Class / Quest / Requirement", "Status", "Owned", "Need", "Source / Reward"}
+	for column, header := range headers {
+		cell := tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetSelectable(false)
+		if column == 0 {
+			cell.SetExpansion(1).SetMaxWidth(46)
+		} else if column == 4 {
+			cell.SetExpansion(1)
+		} else {
+			cell.SetAlign(tview.AlignRight)
+		}
+		table.SetCell(0, column, cell)
+	}
+
+	expandableRows := make(map[int]string)
+	row := 1
+	ready := make([]skyquest.QuestProgress, 0)
+	for _, item := range progress {
+		if item.Ready {
+			ready = append(ready, item)
+		}
+	}
+	table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("READY TO TURN IN (%d)", len(ready))).SetTextColor(tcell.ColorGreen).SetSelectable(false))
+	row++
+	if len(ready) == 0 {
+		table.SetCell(row, 0, tview.NewTableCell("  No quests currently have every required item").SetTextColor(tcell.ColorGray).SetSelectable(false))
+		row++
+	} else {
+		for _, item := range ready {
+			setSkyRow(table, row, "  ✓ "+item.Class+" — "+item.Quest.Name, "READY", "", "", questDetails(item.Quest), tcell.ColorGreen, false)
+			row++
+		}
+	}
+
+	table.SetCell(row, 0, tview.NewTableCell("ALL CLASSES").SetTextColor(tcell.ColorYellow).SetSelectable(false))
+	row++
+	for index := 0; index < len(progress); {
+		className := progress[index].Class
+		end := index
+		readyCount := 0
+		for end < len(progress) && progress[end].Class == className {
+			if progress[end].Ready {
+				readyCount++
+			}
+			end++
+		}
+		classKey := "class:" + className
+		arrow := "▶"
+		if expanded[classKey] {
+			arrow = "▼"
+		}
+		setSkyRow(table, row, arrow+" "+className, fmt.Sprintf("%d ready / %d", readyCount, end-index), "", "", "", tcell.ColorWhite, true)
+		expandableRows[row] = classKey
+		row++
+		if expanded[classKey] {
+			for _, item := range progress[index:end] {
+				questKey := "quest:" + className + ":" + item.Quest.Name
+				questArrow := "  ▶"
+				if expanded[questKey] {
+					questArrow = "  ▼"
+				}
+				status := fmt.Sprintf("missing %d", len(item.Missing))
+				color := tcell.ColorWhite
+				if item.Ready {
+					status = "READY"
+					color = tcell.ColorGreen
+				}
+				setSkyRow(table, row, questArrow+" "+item.Quest.Name, status, "", "", questDetails(item.Quest), color, true)
+				expandableRows[row] = questKey
+				row++
+				if expanded[questKey] {
+					for _, requirement := range item.Quest.Requirements {
+						owned := inventory[requirement.Name]
+						mark := "✗"
+						requirementColor := tcell.ColorRed
+						if owned >= requirement.Quantity {
+							mark = "✓"
+							requirementColor = tcell.ColorGreen
+						}
+						setSkyRow(table, row, "      "+mark+" "+requirement.Name, "", fmt.Sprint(owned), fmt.Sprint(requirement.Quantity), skyRequirementSource(requirement), requirementColor, false)
+						row++
+					}
+				}
+			}
+		}
+		index = end
+	}
+	return expandableRows
+}
+
+func setSkyRow(table *tview.Table, row int, name, status, owned, needed, detail string, color tcell.Color, selectable bool) {
+	values := []string{name, status, owned, needed, detail}
+	for column, value := range values {
+		cell := tview.NewTableCell(value).SetTextColor(color).SetSelectable(selectable)
+		if column == 0 {
+			cell.SetExpansion(1).SetMaxWidth(46)
+		} else if column == 4 {
+			cell.SetExpansion(1)
+		} else {
+			cell.SetAlign(tview.AlignRight)
+		}
+		table.SetCell(row, column, cell)
+	}
+}
+
+func questDetails(quest skyquest.Quest) string {
+	return "Reward: " + strings.Join(quest.Rewards, " / ") + " — " + quest.QuestGiver
+}
+
+func skyRequirementSource(requirement skyquest.Requirement) string {
+	if requirement.Island > 0 && requirement.DropsFrom != "" {
+		return fmt.Sprintf("Island %d — %s", requirement.Island, requirement.DropsFrom)
+	}
+	if requirement.Island > 0 {
+		return fmt.Sprintf("Island %d", requirement.Island)
+	}
+	if requirement.Kind == "rune" {
+		return "Plane of Sky random drop"
+	}
+	return "Plane of Sky"
+}
+
+func toggleSkyQuestTree(progress []skyquest.QuestProgress, expanded map[string]bool) {
+	keys := make([]string, 0)
+	seenClasses := make(map[string]bool)
+	for _, item := range progress {
+		classKey := "class:" + item.Class
+		if !seenClasses[classKey] {
+			keys = append(keys, classKey)
+			seenClasses[classKey] = true
+		}
+		keys = append(keys, "quest:"+item.Class+":"+item.Quest.Name)
+	}
+	closeAll := false
+	for _, key := range keys {
+		if expanded[key] {
+			closeAll = true
+			break
+		}
+	}
+	for _, key := range keys {
+		expanded[key] = !closeAll
+	}
 }
 
 func fightTitle(fight *combat.Fight, current bool) string {

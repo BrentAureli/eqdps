@@ -10,6 +10,7 @@ import (
 
 	"github.com/rivo/tview"
 	"github.com/uija/eqdps/internal/combat"
+	"github.com/uija/eqdps/internal/skyquest"
 	"github.com/uija/eqdps/internal/xp"
 )
 
@@ -126,6 +127,57 @@ func TestOperationsShareDetailedProgressText(t *testing.T) {
 	for _, want := range []string{"Scanning existing loot history…", "50%", "512.0 KiB / 1.0 MiB", "4321 lines processed", "████"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("progress text %q does not contain %q", got, want)
+		}
+	}
+}
+
+func TestFillSkyQuestTableShowsReadySummaryAndRequirementSources(t *testing.T) {
+	quest := skyquest.Quest{
+		Name: "Bard Test of Tone", QuestGiver: "Clarisa Spiritsong", Rewards: []string{"Mask of Song"},
+		Requirements: []skyquest.Requirement{
+			{Name: "Wind Rune Meda", Kind: "rune", Quantity: 1},
+			{Name: "Light Woolen Mask", Kind: "item", Quantity: 1, Island: 3, DropsFrom: "Gorgalosk"},
+		},
+	}
+	progress := []skyquest.QuestProgress{{
+		Class: "Bard", Quest: quest, Missing: []skyquest.Requirement{quest.Requirements[1]},
+	}}
+	expanded := map[string]bool{"class:Bard": true, "quest:Bard:Bard Test of Tone": true}
+	table := tview.NewTable()
+	rows := fillSkyQuestTable(table, progress, map[string]int{"Wind Rune Meda": 1}, expanded)
+	if len(rows) != 2 {
+		t.Fatalf("expandable rows = %d, want 2", len(rows))
+	}
+	contents := ""
+	for row := 0; row < table.GetRowCount(); row++ {
+		for column := 0; column < table.GetColumnCount(); column++ {
+			contents += table.GetCell(row, column).Text + "\n"
+		}
+	}
+	for _, want := range []string{"READY TO TURN IN (0)", "Bard Test of Tone", "Reward: Mask of Song — Clarisa Spiritsong", "Wind Rune Meda", "Plane of Sky random drop", "Light Woolen Mask", "Island 3 — Gorgalosk"} {
+		if !strings.Contains(contents, want) {
+			t.Fatalf("Sky table does not contain %q:\n%s", want, contents)
+		}
+	}
+}
+
+func TestToggleSkyQuestTreeExpandsAndCollapsesEverything(t *testing.T) {
+	progress := []skyquest.QuestProgress{
+		{Class: "Bard", Quest: skyquest.Quest{Name: "Test One"}},
+		{Class: "Bard", Quest: skyquest.Quest{Name: "Test Two"}},
+		{Class: "Cleric", Quest: skyquest.Quest{Name: "Test Three"}},
+	}
+	expanded := make(map[string]bool)
+	toggleSkyQuestTree(progress, expanded)
+	for _, key := range []string{"class:Bard", "quest:Bard:Test One", "quest:Bard:Test Two", "class:Cleric", "quest:Cleric:Test Three"} {
+		if !expanded[key] {
+			t.Fatalf("%q was not expanded", key)
+		}
+	}
+	toggleSkyQuestTree(progress, expanded)
+	for key, open := range expanded {
+		if open {
+			t.Fatalf("%q remained expanded", key)
 		}
 	}
 }
