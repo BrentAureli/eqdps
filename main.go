@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	skyCompleteColor = tcell.NewHexColor(0xd2f0d2)
-	skyMissingColor  = tcell.NewHexColor(0xf2cccc)
+	skyCompleteColor = tcell.NewHexColor(0xbfe8bf)
+	skyMissingColor  = tcell.NewHexColor(0xefb8b8)
 )
 
 func main() {
