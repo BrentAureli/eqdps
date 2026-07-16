@@ -24,6 +24,8 @@ import (
 var (
 	skyCompleteColor = tcell.NewHexColor(0xbfe8bf)
 	skyMissingColor  = tcell.NewHexColor(0xefb8b8)
+	infoBarColor     = tcell.NewHexColor(0x303030)
+	infoNoticeColor  = tcell.NewHexColor(0x285b38)
 )
 
 func main() {
@@ -299,8 +301,18 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 
 	header := tview.NewTextView().
 		SetDynamicColors(true)
-	status := tview.NewTextView().
+	infoLeft := tview.NewTextView().
 		SetDynamicColors(true)
+	infoNotice := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignCenter)
+	infoSky := tview.NewTextView().
+		SetDynamicColors(true).
+		SetTextAlign(tview.AlignRight)
+	shortcuts := tview.NewTextView().
+		SetDynamicColors(true)
+	var skyNotice string
+	var skyNoticeUntil time.Time
 
 	render := func() {
 		mu.Lock()
@@ -308,7 +320,34 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 
 		sections := filterSections(tracker.DisplaySections(), fightFilter)
 		header.SetText(titleText(logPath, terminalWidth))
-		status.SetText(statusText(xpSession.SnapshotLive(time.Now()), fightFilter))
+		now := time.Now()
+		infoLeft.SetText(xpInfoText(xpSession.SnapshotLive(now), fightFilter))
+		skyMu.Lock()
+		activeSkyTracker := skyTracker
+		readyCount := 0
+		if activeSkyTracker != nil {
+			readyCount = len(activeSkyTracker.ReadyQuests())
+		}
+		notice := skyNotice
+		noticeActive := notice != "" && now.Before(skyNoticeUntil)
+		if !noticeActive && skyNotice != "" {
+			skyNotice = ""
+		}
+		skyMu.Unlock()
+		barColor := infoBarColor
+		if noticeActive {
+			barColor = infoNoticeColor
+		}
+		for _, view := range []*tview.TextView{infoLeft, infoNotice, infoSky} {
+			view.SetBackgroundColor(barColor)
+		}
+		infoNotice.SetText(notice)
+		if activeSkyTracker == nil {
+			infoSky.SetText(" PoS: off ")
+		} else {
+			infoSky.SetText(fmt.Sprintf(" PoS: %d ready ", readyCount))
+		}
+		shortcuts.SetText(shortcutsText())
 		expandableRows = fillTable(table, sections, expandedRows, terminalWidth)
 		if skyViewOpen {
 			renderSkyView()
@@ -341,11 +380,24 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 			skyMu.Lock()
 			activeSkyTracker := skyTracker
 			if activeSkyTracker != nil {
+				record, parsed := eqlog.ParseRecord(line)
+				isLoot := parsed && record.Kind == eqlog.RecordLoot
+				var beforeReady map[string]bool
+				if isLoot {
+					beforeReady = readyQuestSet(activeSkyTracker.ReadyQuests())
+				}
 				if err := activeSkyTracker.ProcessLine(line, endOffset); err != nil {
 					skyMu.Unlock()
 					errCh <- err
 					app.Stop()
 					return
+				}
+				if isLoot {
+					newlyReady := newReadyQuests(beforeReady, activeSkyTracker.ReadyQuests())
+					if len(newlyReady) > 0 {
+						skyNotice = readyNoticeText(newlyReady)
+						skyNoticeUntil = time.Now().Add(8 * time.Second)
+					}
 				}
 			}
 			skyMu.Unlock()
@@ -371,11 +423,16 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		}
 	}()
 
+	infoBar := tview.NewFlex().
+		AddItem(infoLeft, 0, 3, false).
+		AddItem(infoNotice, 0, 2, false).
+		AddItem(infoSky, 16, 0, false)
 	layout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(header, 1, 0, false).
 		AddItem(table, 0, 1, true).
-		AddItem(status, 1, 0, false)
+		AddItem(infoBar, 1, 0, false).
+		AddItem(shortcuts, 1, 0, false)
 	pages := tview.NewPages().
 		AddPage("main", layout, true, true)
 	skyTable := tview.NewTable().SetBorders(false).SetSelectable(true, false).SetFixed(1, 0)
@@ -918,13 +975,17 @@ func titleText(logPath string, terminalWidth int) string {
 	return fmt.Sprintf("[::b]%s[::-]  %s", title, fitText(logPath, maxPathWidth))
 }
 
-func statusText(snapshot xp.Snapshot, fightFilter string) string {
-	controls := "[gray]o[::-] history   [gray]p[::-] Sky quests   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] toggle tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
+func shortcutsText() string {
+	return "[gray]o[::-] history   [gray]p[::-] Sky quests   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] toggle tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
+}
+
+func xpInfoText(snapshot xp.Snapshot, fightFilter string) string {
+	filter := ""
 	if fightFilter != "" {
-		controls = fmt.Sprintf("[yellow]filter: %s[::-]   %s", tview.Escape(fightFilter), controls)
+		filter = fmt.Sprintf("   [yellow]filter: %s[::-]", tview.Escape(fightFilter))
 	}
 	if snapshot.Gains == 0 {
-		return controls
+		return " XP: waiting for data" + filter
 	}
 	etaText := "~--:-- to level"
 	if eta, ok := snapshot.TimeToLevel(); ok {
@@ -934,13 +995,42 @@ func statusText(snapshot xp.Snapshot, fightFilter string) string {
 	if snapshot.ProgressKnown {
 		progressPrefix = ""
 	}
-	return fmt.Sprintf("[green]XP %s%.1f%%  %.1f%%/h  %s[::-]   %s",
+	return fmt.Sprintf(" [green]XP %s%.1f%%  %.1f%%/h  %s[::-]%s",
 		progressPrefix,
 		snapshot.LevelPercent,
 		snapshot.PercentPerHour,
 		etaText,
-		controls,
+		filter,
 	)
+}
+
+func readyQuestSet(quests []skyquest.QuestProgress) map[string]bool {
+	result := make(map[string]bool, len(quests))
+	for _, quest := range quests {
+		result[quest.Quest.Name] = true
+	}
+	return result
+}
+
+func newReadyQuests(before map[string]bool, after []skyquest.QuestProgress) []skyquest.QuestProgress {
+	var result []skyquest.QuestProgress
+	for _, quest := range after {
+		if !before[quest.Quest.Name] {
+			result = append(result, quest)
+		}
+	}
+	return result
+}
+
+func readyNoticeText(quests []skyquest.QuestProgress) string {
+	if len(quests) == 0 {
+		return ""
+	}
+	text := "✓ READY: " + quests[0].Class + " — " + skyQuestDisplayName(quests[0].Class, quests[0].Quest.Name)
+	if len(quests) > 1 {
+		text += fmt.Sprintf(" (+%d more)", len(quests)-1)
+	}
+	return text
 }
 
 func historyDuration(label string) (time.Duration, bool) {

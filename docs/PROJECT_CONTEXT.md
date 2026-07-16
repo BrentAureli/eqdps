@@ -83,9 +83,13 @@ location and compared to timestamps parsed from the log in the same way.
 
 ## TUI Behavior and Constraints
 
-The layout is a one-line title/path header, the mob table, and a one-line status
-bar. The status bar shows approximate current-level progress, XP/hour, estimated
-time to the next level, and hotkeys. Columns are Combatant, %, Damage, DPS,
+The layout is a one-line title/path header, the mob table, a one-line information
+bar, and a separate one-line shortcut bar. The dark-gray information bar shows
+approximate current-level progress, XP/hour, estimated time to the next level,
+and `PoS: N ready` on the far right. When live loot makes one or more quests
+ready, its background becomes dark green and its center shows the first newly
+ready quest for eight seconds. Startup/catch-up processing never produces this
+notification. Columns are Combatant, %, Damage, DPS,
 SDPS, Hits, Crits, Min, Max, and Active. DPS and percentages are rounded to
 whole numbers. The Combatant column adapts to terminal width, never below 20
 characters, and lets tview distribute otherwise-unused width before applying an

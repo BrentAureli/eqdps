@@ -208,23 +208,23 @@ func TestSkyQuestDisplayNameRemovesOnlyMatchingClassPrefix(t *testing.T) {
 	}
 }
 
-func TestStatusTextShowsSessionXP(t *testing.T) {
-	got := statusText(xp.Snapshot{
+func TestXPInfoTextShowsSessionXP(t *testing.T) {
+	got := xpInfoText(xp.Snapshot{
 		Percent:        97.085,
 		LevelPercent:   97.085,
 		PercentPerHour: 81.06,
 		ActiveDuration: 71*time.Minute + 15*time.Second,
 		Gains:          81,
 	}, "")
-	for _, want := range []string{"XP ~97.1%", "81.1%/h", "~00:03 to level", "reset"} {
+	for _, want := range []string{"XP ~97.1%", "81.1%/h", "~00:03 to level"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected status %q to contain %q", got, want)
 		}
 	}
 }
 
-func TestStatusTextShowsKnownProgressWithoutApproximationMarker(t *testing.T) {
-	got := statusText(xp.Snapshot{
+func TestXPInfoTextShowsKnownProgressWithoutApproximationMarker(t *testing.T) {
+	got := xpInfoText(xp.Snapshot{
 		LevelPercent:   27,
 		ProgressKnown:  true,
 		PercentPerHour: 60,
@@ -238,12 +238,33 @@ func TestStatusTextShowsKnownProgressWithoutApproximationMarker(t *testing.T) {
 	}
 }
 
-func TestStatusTextShowsActiveFightFilter(t *testing.T) {
-	got := statusText(xp.Snapshot{}, "King Tranix")
-	for _, want := range []string{"filter: King Tranix", "/", "filter"} {
+func TestXPInfoTextShowsActiveFightFilter(t *testing.T) {
+	got := xpInfoText(xp.Snapshot{}, "King Tranix")
+	for _, want := range []string{"filter: King Tranix", "XP: waiting for data"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected status %q to contain %q", got, want)
 		}
+	}
+}
+
+func TestReadyNoticeTextCombinesNewlyReadyQuests(t *testing.T) {
+	quests := []skyquest.QuestProgress{
+		{Class: "Necromancer", Quest: skyquest.Quest{Name: "Necromancer Test of Power"}},
+		{Class: "Bard", Quest: skyquest.Quest{Name: "Bard Test of Tone"}},
+	}
+	if got, want := readyNoticeText(quests), "✓ READY: Necromancer — Test of Power (+1 more)"; got != want {
+		t.Fatalf("readyNoticeText() = %q, want %q", got, want)
+	}
+}
+
+func TestNewReadyQuestsExcludesAlreadyReadyQuest(t *testing.T) {
+	after := []skyquest.QuestProgress{
+		{Class: "Bard", Quest: skyquest.Quest{Name: "Bard Test of Tone"}},
+		{Class: "Necromancer", Quest: skyquest.Quest{Name: "Necromancer Test of Power"}},
+	}
+	got := newReadyQuests(map[string]bool{"Bard Test of Tone": true}, after)
+	if len(got) != 1 || got[0].Quest.Name != "Necromancer Test of Power" {
+		t.Fatalf("unexpected newly ready quests: %#v", got)
 	}
 }
 
