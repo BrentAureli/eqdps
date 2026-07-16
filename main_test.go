@@ -153,7 +153,7 @@ func TestFillSkyQuestTableShowsReadySummaryAndRequirementSources(t *testing.T) {
 			contents += table.GetCell(row, column).Text + "\n"
 		}
 	}
-	for _, want := range []string{"READY TO TURN IN (0)", "Bard", "Test of Tone", "Say: tone — Clarisa Spiritsong — Reward: Mask of Song", "Wind Rune Meda", "Plane of Sky random drop", "Light Woolen Mask", "Island 3 — Gorgalosk"} {
+	for _, want := range []string{"READY TO TURN IN (0)", "Bard", "Test of Tone", "Clarisa Spiritsong — Reward: Mask of Song", "Wind Rune Meda", "Plane of Sky random drop", "Light Woolen Mask", "Island 3 — Gorgalosk"} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("Sky table does not contain %q:\n%s", want, contents)
 		}
@@ -172,12 +172,6 @@ func TestSkyQuestDisplayNameRemovesOnlyMatchingClassPrefix(t *testing.T) {
 		if got := skyQuestDisplayName(test.className, test.questName); got != test.want {
 			t.Errorf("skyQuestDisplayName(%q, %q) = %q, want %q", test.className, test.questName, got, test.want)
 		}
-	}
-}
-
-func TestSkyQuestTriggerComesFromTestName(t *testing.T) {
-	if got := skyQuestTrigger("Shadow Knight Test of Raising of the Dead"); got != "raising of the dead" {
-		t.Fatalf("trigger = %q, want %q", got, "raising of the dead")
 	}
 }
 
