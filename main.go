@@ -21,6 +21,11 @@ import (
 	"github.com/uija/eqdps/internal/xp"
 )
 
+var (
+	skyCompleteColor = tcell.NewHexColor(0xd2f0d2)
+	skyMissingColor  = tcell.NewHexColor(0xf2cccc)
+)
+
 func main() {
 	textMode := flag.Bool("text", false, "print the DPS table to stdout instead of opening the terminal UI")
 	idleTimeout := flag.Duration("idle-timeout", combat.DefaultIdleTimeout, "end the current fight after this much time without combat")
@@ -1092,14 +1097,14 @@ func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, in
 			ready = append(ready, item)
 		}
 	}
-	table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("READY TO TURN IN (%d)", len(ready))).SetTextColor(tcell.ColorGreen).SetSelectable(false))
+	table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("READY TO TURN IN (%d)", len(ready))).SetTextColor(skyCompleteColor).SetSelectable(false))
 	row++
 	if len(ready) == 0 {
 		table.SetCell(row, 0, tview.NewTableCell("  No quests currently have every required item").SetTextColor(tcell.ColorGray).SetSelectable(false))
 		row++
 	} else {
 		for _, item := range ready {
-			setSkyRow(table, row, "  ✓ "+item.Class+" — "+skyQuestDisplayName(item.Class, item.Quest.Name), "READY", "", "", questDetails(item.Quest), tcell.ColorGreen, false)
+			setSkyRow(table, row, "  ✓ "+item.Class+" — "+skyQuestDisplayName(item.Class, item.Quest.Name), "READY", "", "", questDetails(item.Quest), skyCompleteColor, false)
 			row++
 		}
 	}
@@ -1127,10 +1132,10 @@ func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, in
 			color := tcell.ColorWhite
 			if item.Completed {
 				status = "DONE"
-				color = tcell.ColorGreen
+				color = skyCompleteColor
 			} else if item.Ready {
 				status = "READY"
-				color = tcell.ColorGreen
+				color = skyCompleteColor
 			}
 			details := item.Quest.QuestGiver + " — Reward: " + strings.Join(item.Quest.Rewards, " / ")
 			setSkyRow(table, row, "  "+skyQuestDisplayName(item.Class, item.Quest.Name), status, "", "", details, color, true)
@@ -1138,15 +1143,15 @@ func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, in
 			for _, requirement := range item.Quest.Requirements {
 				owned := inventory[requirement.Name]
 				mark := "✗"
-				requirementColor := tcell.ColorRed
+				requirementColor := skyMissingColor
 				ownedText, neededText := fmt.Sprint(owned), fmt.Sprint(requirement.Quantity)
 				if item.Completed {
 					mark = "✓"
-					requirementColor = tcell.ColorGreen
+					requirementColor = skyCompleteColor
 					ownedText, neededText = "—", "—"
 				} else if owned >= requirement.Quantity {
 					mark = "✓"
-					requirementColor = tcell.ColorGreen
+					requirementColor = skyCompleteColor
 				}
 				setSkyRow(table, row, "      "+mark+" "+requirement.Name, "", ownedText, neededText, skyRequirementSource(requirement), requirementColor, false)
 				row++
