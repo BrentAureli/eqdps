@@ -8,7 +8,7 @@ parses or debug combat detection.
 
 `Because I am lazy and wanted to play EverQuest Legends Open Beta, Codex did most of the work.`
 
-![eqdps terminal interface](img/Screenshot-2026-07-14_07-31-44.png)
+![eqdps terminal interface](img/Screenshot-2026-07-16_08-53-27.png)
 
 ## Features
 
