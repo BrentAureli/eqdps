@@ -32,6 +32,11 @@ intentionally not duplicated under `docs/`.
 | `internal/combat/combat_test.go` | Meter and per-mob state behavior |
 | `internal/xp/session.go` | Session XP totals, active time, and XP/hour |
 | `internal/xp/session_test.go` | Pause-capping and XP-rate behavior |
+| `internal/skyquest/database.go` | Embedded Plane of Sky class-quest database loader |
+| `internal/skyquest/plane_of_sky_quests.json` | Generated EQL Wiki quest requirements and rewards |
+| `internal/skyquest/tracker.go` | Zone-aware quest holdings and ready-quest calculation |
+| `internal/skyquest/persistence.go` | Character state, initial scan, and byte-offset checkpoints |
+| `tools/skyquestdb/main.go` | Regenerates the embedded database from EQL Wiki |
 | `README.md` | User-facing installation and usage |
 | `docs/PARSER_RECHECK.md` | Full-corpus parser quality audit procedure |
 
@@ -48,6 +53,12 @@ log line
 
 Live mode opens the file and seeks to EOF, so invocation without replay flags
 starts at "now." `followLog` polls EOF every 250 ms and processes appended lines.
+
+Plane of Sky quest tracking is independent of combat replay. Once enabled, it
+maintains `CHARACTER_SERVER_PoS.json` beside the selected logfile and resumes
+from an exact byte offset. A missing state file opens an opt-in TUI prompt for a
+one-time full-log scan. Choosing `Not Now` or cancelling creates no state and
+asks again next launch. Text mode does not initiate the first scan.
 
 Replay mode scans the file from a cutoff, uses log timestamps for idle endings,
 then live tailing still opens at the current EOF. `--since` takes precedence over
@@ -144,6 +155,36 @@ wall-clock time.
 The XP session starts with the first observed combat or XP gain. Startup replay,
 history reloads, choosing `Now`, and `r` each create the corresponding fresh or
 replayed XP session alongside the combat tracker.
+
+## Plane of Sky Quest Holdings
+
+The Plane of Sky class-quest database is generated from the EQL Wiki MediaWiki
+source and embedded into the executable with Go `embed`. Runtime use remains
+offline and single-executable. The generated data currently contains 16
+classes, 95 quests, 222 requirements, and 128 unique required items. Source page
+and revision metadata are retained in the JSON.
+
+The tracker adds only exact known requirements while the last parsed zone is
+`The Plane of Sky`. Normally retained loot and loot stored directly in the
+currency tab count as owned. Items immediately sold, including `sold it for
+free`, or converted into an upgraded item do not count. Exact `You successfully
+destroyed N Item.` messages decrement known holdings in every zone because an
+item may be destroyed after leaving Sky.
+
+On first enable, the scanner processes the logfile from byte zero in a
+background goroutine, reports byte and line progress, and keeps the result in
+memory until successful completion. Cancellation creates no JSON or partial
+checkpoint. Later starts load the holdings and process only complete lines after
+the saved byte offset. CRLF offsets are measured from original bytes. A saved
+first-line fingerprint and file-size check reject unsafe automatic recovery
+after log replacement or truncation. Combat `--back`, `--since`, and history
+reloads never mutate Sky holdings.
+
+The state is an evidence-based estimate rather than an authoritative EverQuest
+inventory snapshot. Logged destruction is handled, but trades, quest turn-ins,
+actions while logging is disabled, and other unobserved removals still require
+future reconciliation. Reward/turn-in detection and the holdings/ready-quest
+TUI are not implemented yet.
 
 ## Damage and DPS Model
 

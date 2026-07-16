@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -48,12 +49,23 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
-	skyTracker, err := skyquest.OpenPersistentTracker(logPath, skyDatabase)
+	skyStateExists, err := skyquest.StateExists(logPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
+	var skyTracker *skyquest.PersistentTracker
+	if skyStateExists {
+		skyTracker, err = skyquest.OpenPersistentTracker(logPath, skyDatabase)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+	}
 	if *textMode {
+		if !skyStateExists {
+			fmt.Fprintln(os.Stderr, "Plane of Sky quest tracking is not initialized; launch the TUI once to enable it")
+		}
 		tracker, xpSession, err := replayLog(logPath, *idleTimeout, backDuration(*backMinutes), since, *historyLimit)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -63,7 +75,7 @@ func main() {
 		return
 	}
 
-	if err := runApp(logPath, *idleTimeout, backDuration(*backMinutes), since, *historyLimit, skyTracker); err != nil {
+	if err := runApp(logPath, *idleTimeout, backDuration(*backMinutes), since, *historyLimit, skyDatabase, skyTracker, !skyStateExists); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
@@ -246,15 +258,26 @@ func printText(tracker *combat.FightTracker, xpSession *xp.Session) {
 	}
 }
 
-func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, historyLimit int, skyTracker *skyquest.PersistentTracker) error {
+func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, historyLimit int, skyDatabase skyquest.Database, skyTracker *skyquest.PersistentTracker, skyNeedsSetup bool) error {
 	app := tview.NewApplication()
 	tracker := combat.NewFightTrackerWithHistory(historyLimit)
 	xpSession := xp.NewSession()
 	var mu sync.Mutex
+	var skyMu sync.Mutex
 	expandedRows := make(map[string]bool)
 	expandableRows := make(map[int]string)
 	terminalWidth := 100
 	fightFilter := ""
+	skyStartOffset := int64(0)
+	if skyTracker != nil {
+		skyStartOffset = skyTracker.Offset()
+	} else {
+		info, err := os.Stat(logPath)
+		if err != nil {
+			return fmt.Errorf("stat log for live tail: %w", err)
+		}
+		skyStartOffset = info.Size()
+	}
 
 	if back > 0 || !since.IsZero() {
 		backfill, backfillXP, err := replayLog(logPath, idleTimeout, back, since, historyLimit)
@@ -304,15 +327,21 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		})
 	}
 	go func() {
-		if err := followLog(logPath, skyTracker.Offset(), done, func(line string, endOffset int64) {
+		if err := followLog(logPath, skyStartOffset, done, func(line string, endOffset int64) {
 			mu.Lock()
 			processLine(line, tracker, xpSession, idleTimeout)
 			mu.Unlock()
-			if err := skyTracker.ProcessLine(line, endOffset); err != nil {
-				errCh <- err
-				app.Stop()
-				return
+			skyMu.Lock()
+			activeSkyTracker := skyTracker
+			if activeSkyTracker != nil {
+				if err := activeSkyTracker.ProcessLine(line, endOffset); err != nil {
+					skyMu.Unlock()
+					errCh <- err
+					app.Stop()
+					return
+				}
 			}
+			skyMu.Unlock()
 			app.QueueUpdateDraw(render)
 		}); err != nil {
 			errCh <- err
@@ -342,11 +371,111 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		AddItem(status, 1, 0, false)
 	pages := tview.NewPages().
 		AddPage("main", layout, true, true)
+	skySetupOpen := false
+	skyScanOpen := false
+	var skyScanCancel chan struct{}
+	var skyScanView *tview.TextView
 	historyOpen := false
 	filterOpen := false
 	replayOpen := false
 	var replayCancel chan struct{}
 	var replayView *tview.TextView
+
+	closeSkySetup := func() {
+		pages.RemovePage("sky-setup")
+		skySetupOpen = false
+		app.SetFocus(table)
+	}
+
+	closeSkyScan := func() {
+		pages.RemovePage("sky-scan")
+		skyScanOpen = false
+		skyScanCancel = nil
+		skyScanView = nil
+		app.SetFocus(table)
+	}
+
+	startSkyScan := func() {
+		info, err := os.Stat(logPath)
+		if err != nil {
+			skyScanOpen = true
+			skyScanView = tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
+			skyScanView.SetBorder(true).SetTitle(" Plane of Sky scan failed — Esc close ")
+			skyScanView.SetText("[red]" + tview.Escape(err.Error()) + "[::-]")
+			pages.AddPage("sky-scan", centeredView(skyScanView, 64, 7), true, true)
+			app.SetFocus(skyScanView)
+			return
+		}
+
+		skyScanOpen = true
+		skyScanCancel = make(chan struct{})
+		cancel := skyScanCancel
+		skyScanView = tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignCenter)
+		skyScanView.SetBorder(true).SetTitle(" Initial Plane of Sky scan — Esc cancel ")
+		skyScanView.SetText(skyScanProgressText(skyquest.ScanProgress{Total: info.Size()}))
+		pages.AddPage("sky-scan", centeredView(skyScanView, 64, 7), true, true)
+		app.SetFocus(skyScanView)
+
+		go func(snapshotSize int64) {
+			created, scanErr := skyquest.InitializePersistentTracker(
+				logPath, skyDatabase, snapshotSize,
+				func(progress skyquest.ScanProgress) {
+					app.QueueUpdateDraw(func() {
+						if skyScanOpen && skyScanView != nil {
+							skyScanView.SetText(skyScanProgressText(progress))
+						}
+					})
+				},
+				cancel,
+			)
+			if scanErr == nil {
+				skyMu.Lock()
+				scanErr = created.SyncLog(logPath)
+				if scanErr == nil {
+					skyTracker = created
+				}
+				skyMu.Unlock()
+			}
+			app.QueueUpdateDraw(func() {
+				if errors.Is(scanErr, skyquest.ErrScanCancelled) {
+					closeSkyScan()
+					return
+				}
+				if scanErr != nil {
+					skyScanCancel = nil
+					if skyScanView != nil {
+						skyScanView.SetTitle(" Plane of Sky scan failed — Esc close ")
+						skyScanView.SetText("[red]" + tview.Escape(scanErr.Error()) + "[::-]")
+					}
+					return
+				}
+				closeSkyScan()
+			})
+		}(info.Size())
+	}
+
+	showSkySetup := func() {
+		skySetupOpen = true
+		info, _ := os.Stat(logPath)
+		size := int64(0)
+		if info != nil {
+			size = info.Size()
+		}
+		modal := tview.NewModal().
+			SetText(fmt.Sprintf(
+				"Plane of Sky Quest Tracker\n\nTo determine which quest items you already own, eqdps needs to scan your existing logfile once.\n\nLog: %s\nSize: %s\n\nNo state file is created if you choose Not Now.",
+				filepath.Base(logPath), formatByteSize(size),
+			)).
+			AddButtons([]string{"Enable and Scan", "Not Now"}).
+			SetDoneFunc(func(_ int, label string) {
+				closeSkySetup()
+				if label == "Enable and Scan" {
+					startSkyScan()
+				}
+			})
+		pages.AddPage("sky-setup", modal, true, true)
+		app.SetFocus(modal)
+	}
 
 	closeHistoryModal := func() {
 		pages.RemovePage("history")
@@ -512,6 +641,24 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	}
 
 	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if skyScanOpen {
+			if event.Key() == tcell.KeyEsc {
+				if skyScanCancel != nil {
+					close(skyScanCancel)
+					skyScanCancel = nil
+					if skyScanView != nil {
+						skyScanView.SetTitle(" Cancelling Plane of Sky scan… ")
+					}
+				} else {
+					closeSkyScan()
+				}
+				return nil
+			}
+			return nil
+		}
+		if skySetupOpen {
+			return event
+		}
 		if replayOpen {
 			if event.Key() == tcell.KeyEsc {
 				if replayCancel != nil {
@@ -595,12 +742,27 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		}
 		return event
 	})
-
-	err := app.SetRoot(pages, true).SetFocus(table).Run()
-	stop()
-	if saveErr := skyTracker.Save(); saveErr != nil && err == nil {
-		err = saveErr
+	if skyNeedsSetup {
+		showSkySetup()
 	}
+
+	app.SetRoot(pages, true)
+	if !skyNeedsSetup {
+		app.SetFocus(table)
+	}
+	err := app.Run()
+	stop()
+	if skyScanCancel != nil {
+		close(skyScanCancel)
+		skyScanCancel = nil
+	}
+	skyMu.Lock()
+	if skyTracker != nil {
+		if saveErr := skyTracker.Save(); saveErr != nil && err == nil {
+			err = saveErr
+		}
+	}
+	skyMu.Unlock()
 	select {
 	case tailErr := <-errCh:
 		return tailErr
@@ -823,6 +985,38 @@ func progressText(progress replayProgress) string {
 	filled := int(percentComplete * barWidth)
 	bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
 	return fmt.Sprintf("\n[green]%s[::-]  %3.0f%%\n\n%d lines processed", bar, percentComplete*100, progress.Lines)
+}
+
+func skyScanProgressText(progress skyquest.ScanProgress) string {
+	percentage := 0
+	if progress.Total > 0 {
+		percentage = int(math.Round(float64(progress.Bytes) * 100 / float64(progress.Total)))
+	}
+	return fmt.Sprintf("\nScanning existing loot history…\n\n%d%%   %s / %s\n%d lines", percentage, formatByteSize(progress.Bytes), formatByteSize(progress.Total), progress.Lines)
+}
+
+func formatByteSize(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	divisor, exponent := int64(unit), 0
+	for value := bytes / unit; value >= unit && exponent < 3; value /= unit {
+		divisor *= unit
+		exponent++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(bytes)/float64(divisor), "KMGT"[exponent])
+}
+
+func centeredView(view tview.Primitive, width, height int) tview.Primitive {
+	return tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(view, width, 0, true).
+			AddItem(nil, 0, 1, false), height, 0, true).
+		AddItem(nil, 0, 1, false)
 }
 
 func fightTitle(fight *combat.Fight, current bool) string {

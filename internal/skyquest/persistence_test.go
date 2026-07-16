@@ -123,3 +123,41 @@ func TestPersistentTrackerLeavesPartialFinalLineForNextRead(t *testing.T) {
 		t.Fatalf("partial line changed inventory: %d", got)
 	}
 }
+
+func TestCancelledInitialScanCreatesNoStateFile(t *testing.T) {
+	directory := t.TempDir()
+	logPath := filepath.Join(directory, "eqlog_Wyrmberg_rivervale.txt")
+	if err := os.WriteFile(logPath, []byte("[Thu Jul 16 10:40:00 2026] You have entered The Plane of Sky.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cancel := make(chan struct{})
+	close(cancel)
+	if _, err := InitializePersistentTracker(logPath, testDatabase(), 0, nil, cancel); !errors.Is(err, ErrScanCancelled) {
+		t.Fatalf("error = %v, want ErrScanCancelled", err)
+	}
+	exists, err := StateExists(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatal("cancelled scan created a state file")
+	}
+}
+
+func TestInitialScanReportsProgress(t *testing.T) {
+	directory := t.TempDir()
+	logPath := filepath.Join(directory, "eqlog_Wyrmberg_rivervale.txt")
+	content := "[Thu Jul 16 10:40:00 2026] You have entered The Plane of Sky.\n"
+	if err := os.WriteFile(logPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var latest ScanProgress
+	if _, err := InitializePersistentTracker(logPath, testDatabase(), int64(len(content)), func(progress ScanProgress) {
+		latest = progress
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if latest.Bytes != int64(len(content)) || latest.Total != int64(len(content)) || latest.Lines != 1 {
+		t.Fatalf("unexpected progress: %#v", latest)
+	}
+}

@@ -26,7 +26,14 @@ const (
 var (
 	logNameRE            = regexp.MustCompile(`^eqlog_([^_]+)_([^_]+)\.txt$`)
 	ErrInvalidCheckpoint = errors.New("Plane of Sky log checkpoint is invalid")
+	ErrScanCancelled     = errors.New("Plane of Sky inventory scan cancelled")
 )
+
+type ScanProgress struct {
+	Bytes int64
+	Total int64
+	Lines int
+}
 
 type CharacterState struct {
 	Version    int            `json:"version"`
@@ -53,6 +60,23 @@ type PersistentTracker struct {
 }
 
 func OpenPersistentTracker(logPath string, database Database) (*PersistentTracker, error) {
+	return openPersistentTracker(logPath, database, 0, nil, nil)
+}
+
+func InitializePersistentTracker(logPath string, database Database, maxBytes int64, onProgress func(ScanProgress), cancel <-chan struct{}) (*PersistentTracker, error) {
+	statePath, err := StatePath(logPath)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(statePath); err == nil {
+		return nil, fmt.Errorf("Plane of Sky state already exists: %s", statePath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("stat Plane of Sky state: %w", err)
+	}
+	return openPersistentTracker(logPath, database, maxBytes, onProgress, cancel)
+}
+
+func openPersistentTracker(logPath string, database Database, maxBytes int64, onProgress func(ScanProgress), cancel <-chan struct{}) (*PersistentTracker, error) {
 	character, server, err := CharacterIdentity(logPath)
 	if err != nil {
 		return nil, err
@@ -80,10 +104,37 @@ func OpenPersistentTracker(logPath string, database Database) (*PersistentTracke
 		}
 	}
 	persistent.tracker.zone = state.Checkpoint.LastZone
-	if err := persistent.syncLog(absoluteLogPath); err != nil {
+	if err := persistent.syncLog(absoluteLogPath, maxBytes, onProgress, cancel); err != nil {
 		return nil, err
 	}
 	return persistent, nil
+}
+
+func StatePath(logPath string) (string, error) {
+	character, server, err := CharacterIdentity(logPath)
+	if err != nil {
+		return "", err
+	}
+	absoluteLogPath, err := filepath.Abs(logPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve log path: %w", err)
+	}
+	return filepath.Join(filepath.Dir(absoluteLogPath), character+"_"+server+"_PoS.json"), nil
+}
+
+func StateExists(logPath string) (bool, error) {
+	path, err := StatePath(logPath)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, fmt.Errorf("stat Plane of Sky state: %w", err)
 }
 
 func CharacterIdentity(logPath string) (string, string, error) {
@@ -94,7 +145,7 @@ func CharacterIdentity(logPath string) (string, string, error) {
 	return matches[1], matches[2], nil
 }
 
-func (p *PersistentTracker) syncLog(logPath string) error {
+func (p *PersistentTracker) syncLog(logPath string, maxBytes int64, onProgress func(ScanProgress), cancel <-chan struct{}) error {
 	file, err := os.Open(logPath)
 	if err != nil {
 		return fmt.Errorf("open log for Plane of Sky inventory: %w", err)
@@ -107,6 +158,12 @@ func (p *PersistentTracker) syncLog(logPath string) error {
 	if info.Size() < p.state.Checkpoint.Offset {
 		return fmt.Errorf("%w: log size %d is smaller than saved offset %d", ErrInvalidCheckpoint, info.Size(), p.state.Checkpoint.Offset)
 	}
+	if maxBytes <= 0 || maxBytes > info.Size() {
+		maxBytes = info.Size()
+	}
+	if maxBytes < p.state.Checkpoint.Offset {
+		return fmt.Errorf("%w: scan limit %d is smaller than saved offset %d", ErrInvalidCheckpoint, maxBytes, p.state.Checkpoint.Offset)
+	}
 	fingerprint, prefixBytes, err := logFingerprint(file, p.state.Checkpoint.PrefixBytes)
 	if err != nil {
 		return err
@@ -118,11 +175,19 @@ func (p *PersistentTracker) syncLog(logPath string) error {
 		return fmt.Errorf("seek Plane of Sky log checkpoint: %w", err)
 	}
 
-	reader := bufio.NewReader(file)
+	reader := bufio.NewReader(io.LimitReader(file, maxBytes-p.state.Checkpoint.Offset))
+	lines := 0
 	for {
+		if lines%1000 == 0 && scanCancelled(cancel) {
+			return ErrScanCancelled
+		}
 		line, readErr := reader.ReadString('\n')
 		if len(line) > 0 && strings.HasSuffix(line, "\n") {
 			p.processLineLocked(line, p.state.Checkpoint.Offset+int64(len(line)))
+			lines++
+			if onProgress != nil && lines%5000 == 0 {
+				onProgress(ScanProgress{Bytes: p.state.Checkpoint.Offset, Total: maxBytes, Lines: lines})
+			}
 		}
 		if readErr == nil {
 			continue
@@ -134,17 +199,44 @@ func (p *PersistentTracker) syncLog(logPath string) error {
 	}
 	p.state.Checkpoint.PrefixSHA256 = fingerprint
 	p.state.Checkpoint.PrefixBytes = prefixBytes
+	if scanCancelled(cancel) {
+		return ErrScanCancelled
+	}
+	if onProgress != nil {
+		onProgress(ScanProgress{Bytes: p.state.Checkpoint.Offset, Total: maxBytes, Lines: lines})
+	}
 	return p.saveLocked()
+}
+
+func (p *PersistentTracker) SyncLog(logPath string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.syncLog(logPath, 0, nil, nil)
 }
 
 func (p *PersistentTracker) ProcessLine(line string, endOffset int64) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if endOffset <= p.state.Checkpoint.Offset {
+		return nil
+	}
 	changed := p.processLineLocked(line, endOffset)
 	if changed {
 		return p.saveLocked()
 	}
 	return nil
+}
+
+func scanCancelled(cancel <-chan struct{}) bool {
+	if cancel == nil {
+		return false
+	}
+	select {
+	case <-cancel:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *PersistentTracker) processLineLocked(line string, endOffset int64) bool {
