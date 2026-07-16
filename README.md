@@ -61,6 +61,7 @@ new lines written after startup.
 | `o` | Open history menu, including a full-log replay |
 | `/` | Filter the displayed fights by mob name |
 | `Enter` | Expand/collapse a mob, combatant, or detail category |
+| `a` | Fully expand or collapse the selected subtree |
 | `r` | Reset the combat and session XP meters and start fresh |
 | `q` / `Esc` | Quit |
 

@@ -532,8 +532,10 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		case tcell.KeyEnter:
 			row, _ := table.GetSelection()
 			if key, ok := expandableRows[row]; ok {
+				rowOffset, columnOffset := table.GetOffset()
 				expandedRows[key] = !expandedRows[key]
 				render()
+				restoreTablePosition(table, expandableRows, key, rowOffset, columnOffset)
 				return nil
 			}
 		}
@@ -551,6 +553,20 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 			mu.Unlock()
 			render()
 			resetTableView(table)
+			return nil
+		case 'a', 'A':
+			row, _ := table.GetSelection()
+			key, ok := expandableRows[row]
+			if !ok {
+				return nil
+			}
+			rowOffset, columnOffset := table.GetOffset()
+			mu.Lock()
+			sections := filterSections(tracker.DisplaySections(), fightFilter)
+			toggleRowTree(key, sections, expandedRows)
+			mu.Unlock()
+			render()
+			restoreTablePosition(table, expandableRows, key, rowOffset, columnOffset)
 			return nil
 		case 'o', 'O':
 			openHistoryModal()
@@ -575,6 +591,16 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 func resetTableView(table *tview.Table) {
 	table.ScrollToBeginning()
 	table.Select(1, 0)
+}
+
+func restoreTablePosition(table *tview.Table, expandableRows map[int]string, selectedKey string, rowOffset, columnOffset int) {
+	for row, key := range expandableRows {
+		if key == selectedKey {
+			table.Select(row, 0)
+			table.SetOffset(rowOffset, columnOffset)
+			return
+		}
+	}
 }
 
 func processLine(line string, tracker *combat.FightTracker, xpSession *xp.Session, idleTimeout time.Duration) {
@@ -651,7 +677,7 @@ func titleText(logPath string, terminalWidth int) string {
 }
 
 func statusText(snapshot xp.Snapshot, fightFilter string) string {
-	controls := "[gray]o[::-] history   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
+	controls := "[gray]o[::-] history   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] toggle tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
 	if fightFilter != "" {
 		controls = fmt.Sprintf("[yellow]filter: %s[::-]   %s", tview.Escape(fightFilter), controls)
 	}
@@ -706,6 +732,68 @@ func filterSections(sections []combat.DisplaySection, query string) []combat.Dis
 		}
 	}
 	return filtered
+}
+
+func expandRowTree(selectedKey string, sections []combat.DisplaySection, expandedRows map[string]bool) bool {
+	keys := rowTreeKeys(selectedKey, sections)
+	for _, key := range keys {
+		expandedRows[key] = true
+	}
+	return len(keys) > 0
+}
+
+func toggleRowTree(selectedKey string, sections []combat.DisplaySection, expandedRows map[string]bool) bool {
+	keys := rowTreeKeys(selectedKey, sections)
+	if len(keys) == 0 {
+		return false
+	}
+	open := false
+	for _, key := range keys {
+		if expandedRows[key] {
+			open = true
+			break
+		}
+	}
+	for _, key := range keys {
+		expandedRows[key] = !open
+	}
+	return true
+}
+
+func rowTreeKeys(selectedKey string, sections []combat.DisplaySection) []string {
+	for _, section := range sections {
+		sectionKey := sectionRowKey(section)
+		mobKey := "mob:" + sectionKey
+		if selectedKey == mobKey {
+			keys := []string{mobKey}
+			for _, player := range section.Fight.Meter.Players() {
+				keys = append(keys, combatantTreeKeys(sectionKey, player)...)
+			}
+			return keys
+		}
+		for _, player := range section.Fight.Meter.Players() {
+			combatantKey := "combatant:" + sectionKey + ":" + player.Name
+			if selectedKey == combatantKey {
+				return combatantTreeKeys(sectionKey, player)
+			}
+			for _, entry := range player.DamageBreakdown() {
+				categoryKey := combatantKey + ":category:" + entry.Name
+				if selectedKey == categoryKey {
+					return []string{categoryKey}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func combatantTreeKeys(sectionKey string, player combat.PlayerStats) []string {
+	combatantKey := "combatant:" + sectionKey + ":" + player.Name
+	keys := []string{combatantKey}
+	for _, entry := range player.DamageBreakdown() {
+		keys = append(keys, combatantKey+":category:"+entry.Name)
+	}
+	return keys
 }
 
 func progressText(progress replayProgress) string {
@@ -867,7 +955,7 @@ func tableLayoutForWidth(width int) tableLayout {
 		width = 100
 	}
 
-	return tableLayout{combatantWidth: clamp(width-61, 20, 32)}
+	return tableLayout{combatantWidth: max(width-61, 20)}
 }
 
 func tableCell(value string, col int, layout tableLayout) *tview.TableCell {

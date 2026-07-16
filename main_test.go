@@ -26,6 +26,26 @@ func TestTableLayoutForNarrowWidthKeepsTextColumnsUsable(t *testing.T) {
 	}
 }
 
+func TestTableLayoutGivesRemainingWidthToCombatantColumn(t *testing.T) {
+	layout := tableLayoutForWidth(120)
+	if layout.combatantWidth != 59 {
+		t.Fatalf("expected remaining width in combatant column, got %d", layout.combatantWidth)
+	}
+}
+
+func TestRestoreTablePositionFollowsLogicalRowAndKeepsViewport(t *testing.T) {
+	table := tview.NewTable().SetSelectable(true, false)
+	table.Select(7, 0)
+	table.SetOffset(4, 2)
+
+	restoreTablePosition(table, map[int]string{25: "selected", 7: "child"}, "selected", 4, 2)
+	row, _ := table.GetSelection()
+	rowOffset, columnOffset := table.GetOffset()
+	if row != 25 || rowOffset != 4 || columnOffset != 2 {
+		t.Fatalf("unexpected restored position: row=%d offset=%d,%d", row, rowOffset, columnOffset)
+	}
+}
+
 func TestHistoryDuration(t *testing.T) {
 	tests := map[string]time.Duration{
 		"Now":          0,
@@ -285,6 +305,79 @@ func TestFillTableExpandsDetailsForEveryCombatantAndCategory(t *testing.T) {
 	// The mob is a combatant too and exposes its melee details.
 	if got := table.GetCell(5, 0).Text; got != "  ▶ a fire giant" {
 		t.Fatalf("expected mob combatant to remain expandable, got %q", got)
+	}
+}
+
+func TestExpandRowTreeOpensEveryDescendant(t *testing.T) {
+	started := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	meter := combat.NewMeter()
+	meter.Add(combat.Event{Time: started, Source: "You", Target: "King Tranix", Amount: 100, Attack: "slash"})
+	meter.Add(combat.Event{Time: started.Add(time.Second), Source: "You", Target: "King Tranix", Amount: 50, Ability: "Smiting Strike"})
+	meter.Add(combat.Event{Time: started.Add(2 * time.Second), Source: "King Tranix", Target: "YOU", Amount: 25, Attack: "hits"})
+	section := combat.DisplaySection{Fight: &combat.Fight{Mob: "King Tranix", Meter: meter}}
+	sectionKey := sectionRowKey(section)
+	expanded := make(map[string]bool)
+
+	if !expandRowTree("mob:"+sectionKey, []combat.DisplaySection{section}, expanded) {
+		t.Fatal("expected mob row to be found")
+	}
+	for _, key := range []string{
+		"mob:" + sectionKey,
+		"combatant:" + sectionKey + ":You",
+		"combatant:" + sectionKey + ":You:category:Melee",
+		"combatant:" + sectionKey + ":You:category:Procs",
+		"combatant:" + sectionKey + ":King Tranix",
+		"combatant:" + sectionKey + ":King Tranix:category:Melee",
+	} {
+		if !expanded[key] {
+			t.Fatalf("expected descendant %q to be expanded: %#v", key, expanded)
+		}
+	}
+}
+
+func TestExpandRowTreeCanOpenOneCombatant(t *testing.T) {
+	started := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	meter := combat.NewMeter()
+	meter.Add(combat.Event{Time: started, Source: "You", Target: "mob", Amount: 10, Attack: "slash"})
+	section := combat.DisplaySection{Fight: &combat.Fight{Mob: "mob", Meter: meter}}
+	sectionKey := sectionRowKey(section)
+	expanded := make(map[string]bool)
+	combatantKey := "combatant:" + sectionKey + ":You"
+
+	if !expandRowTree(combatantKey, []combat.DisplaySection{section}, expanded) || !expanded[combatantKey+":category:Melee"] {
+		t.Fatalf("expected combatant categories to expand: %#v", expanded)
+	}
+	if expanded["mob:"+sectionKey] {
+		t.Fatal("expanding a combatant must not change its parent mob")
+	}
+}
+
+func TestToggleRowTreeClosesEveryDescendantWhenAnythingIsOpen(t *testing.T) {
+	started := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	meter := combat.NewMeter()
+	meter.Add(combat.Event{Time: started, Source: "You", Target: "mob", Amount: 10, Attack: "slash"})
+	meter.Add(combat.Event{Time: started.Add(time.Second), Source: "You", Target: "mob", Amount: 20, Ability: "Proc"})
+	section := combat.DisplaySection{Fight: &combat.Fight{Mob: "mob", Meter: meter}}
+	sectionKey := sectionRowKey(section)
+	mobKey := "mob:" + sectionKey
+	expanded := map[string]bool{mobKey: true}
+
+	if !toggleRowTree(mobKey, []combat.DisplaySection{section}, expanded) {
+		t.Fatal("expected mob tree to be found")
+	}
+	for _, key := range rowTreeKeys(mobKey, []combat.DisplaySection{section}) {
+		if expanded[key] {
+			t.Fatalf("expected entire subtree to close, but %q remains open", key)
+		}
+	}
+
+	if !toggleRowTree(mobKey, []combat.DisplaySection{section}, expanded) {
+		t.Fatal("expected mob tree to reopen")
+	}
+	for _, key := range rowTreeKeys(mobKey, []combat.DisplaySection{section}) {
+		if !expanded[key] {
+			t.Fatalf("expected entire subtree to reopen, but %q remains closed", key)
+		}
 	}
 }
 

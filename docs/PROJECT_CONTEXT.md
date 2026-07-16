@@ -88,6 +88,7 @@ Hotkeys:
 | `o` | History overlay: Now, 1h, 4h, 8h, 1d, Full |
 | `/` | Filter displayed fights by case-insensitive mob-name substring |
 | `Enter` | Expand/collapse a mob, combatant, or detail category |
+| `a` | Fully expand or collapse the selected subtree |
 | `r` | Clear the combat tracker and session XP meter |
 | `q` or `Esc` | Quit |
 
