@@ -179,7 +179,7 @@ func TestFillSkyQuestTableReadySectionIncludesHandInDetailsAndSpacer(t *testing.
 			contents += table.GetCell(row, column).Text + "\n"
 		}
 	}
-	for _, want := range []string{"READY TO TURN IN (1)", "Necromancer — Test of Power", "Drakis Bloodcaster", "Cloak of Spiroc Feathers", "Wind Rune Neza", "Plane of Sky random drop", "Black Silk Cape", "Island 4 — Keeper of Souls"} {
+	for _, want := range []string{"READY TO TURN IN (1)", "Necromancer — Test of Power", "Quest giver: Drakis Bloodcaster", "Cloak of Spiroc Feathers", "Wind Rune Neza", "Plane of Sky random drop", "Black Silk Cape", "Island 4 — Keeper of Souls"} {
 		if !strings.Contains(contents, want) {
 			t.Fatalf("ready section does not contain %q:\n%s", want, contents)
 		}

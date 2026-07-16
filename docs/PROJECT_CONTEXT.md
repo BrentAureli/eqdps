@@ -196,7 +196,8 @@ Press `p` to open the read-only quest tracker. Its flat, wiki-style table lists
 every quest and required item under its class, puts quests with every required
 item in a ready-to-turn-in section, and shows owned and required quantities plus
 known source hints and rewards. READY entries repeat their complete item/source
-checklist and quest giver at the top so no class-section lookup is needed. The
+checklist and show the quest giver on a dedicated line at the top so narrow
+terminals cannot hide it and no class-section lookup is needed. The
 READY heading and quest rows are selectable, allowing Page Up to return fully
 to the summary after scrolling away. Arrow and page keys browse the table; `p`
 or `Esc` returns to the combat view.

@@ -1106,6 +1106,8 @@ func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, in
 		for _, item := range ready {
 			setSkyRow(table, row, "  ✓ "+item.Class+" — "+skyQuestDisplayName(item.Class, item.Quest.Name), "READY", "", "", questDetails(item.Quest), skyCompleteColor, true)
 			row++
+			setSkyRow(table, row, "      Quest giver: "+item.Quest.QuestGiver, "", "", "", "Reward: "+strings.Join(item.Quest.Rewards, " / "), skyCompleteColor, false)
+			row++
 			for _, requirement := range item.Quest.Requirements {
 				owned := inventory[requirement.Name]
 				setSkyRow(table, row, "      ↳ "+requirement.Name, "", fmt.Sprint(owned), fmt.Sprint(requirement.Quantity), skyRequirementSource(requirement), skyCompleteColor, false)
