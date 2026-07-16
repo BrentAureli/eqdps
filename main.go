@@ -735,9 +735,15 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		replayView.SetText(operationProgressText("Loading combat history…", 0, info.Size(), 0))
 
 		go func(snapshotSize int64) {
+			lastProgressUpdate := time.Time{}
 			nextTracker, nextXP, replayErr := replayLogWithProgress(
 				logPath, idleTimeout, duration, time.Time{}, historyLimit, snapshotSize,
 				func(progress replayProgress) {
+					now := time.Now()
+					if progress.Bytes < progress.Total && !lastProgressUpdate.IsZero() && now.Sub(lastProgressUpdate) < 100*time.Millisecond {
+						return
+					}
+					lastProgressUpdate = now
 					app.QueueUpdateDraw(func() {
 						if replayOpen && replayView != nil {
 							replayView.SetText(operationProgressText("Loading combat history…", progress.Bytes, progress.Total, progress.Lines))
