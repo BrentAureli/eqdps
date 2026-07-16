@@ -15,3 +15,9 @@ func TestItemDropsExtractsNPCsAndOmitsZoneLink(t *testing.T) {
 		t.Fatalf("itemDrops() = %q, want %q", got, want)
 	}
 }
+
+func TestCanonicalQuestGiverUsesInGameMagicianNPCName(t *testing.T) {
+	if got := canonicalQuestGiver("Magi Frinon"); got != "Magus Frinon" {
+		t.Fatalf("canonicalQuestGiver() = %q, want Magus Frinon", got)
+	}
+}

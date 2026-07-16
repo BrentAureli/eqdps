@@ -113,6 +113,25 @@ func TestTrackerCompletesKartharTurnInInAdaptiveSkyWithUpgradedItem(t *testing.T
 	}
 }
 
+func TestTrackerCompletesWyrmbergMagicianEmpowermentTurnIn(t *testing.T) {
+	database, err := LoadDatabase()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracker := NewTracker(database)
+	for _, line := range []string{
+		"[Thu Jul 16 19:54:02 2026] You have entered The Plane of Sky.",
+		"[Thu Jul 16 19:55:59 2026] You offered 1 Ceramic Mask to Magus Frinon.",
+		"[Thu Jul 16 19:56:18 2026] You offered 1 Wind Rune Neza to Magus Frinon.",
+		"[Thu Jul 16 19:56:20 2026] You complete the trade with Magus Frinon.",
+	} {
+		processTestLine(t, tracker, line)
+	}
+	if !tracker.Completed()["Magician Test of Empowerment"] {
+		t.Fatal("Magician Test of Empowerment was not completed from the in-game turn-in sequence")
+	}
+}
+
 func TestEmbeddedDatabaseMatchesKartharSkyTurnIns(t *testing.T) {
 	database, err := LoadDatabase()
 	if err != nil {

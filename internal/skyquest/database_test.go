@@ -45,7 +45,13 @@ func TestQuestGiverAndRequirementsUniquelyIdentifyEveryQuest(t *testing.T) {
 	}
 	seen := make(map[string]string)
 	for _, class := range database.Classes {
+		if class.Name == "Magician" && class.QuestNPC != "Magus Frinon" {
+			t.Errorf("Magician quest NPC = %q, want Magus Frinon", class.QuestNPC)
+		}
 		for _, quest := range class.Quests {
+			if class.Name == "Magician" && quest.QuestGiver != "Magus Frinon" {
+				t.Errorf("Magician quest %q giver = %q, want Magus Frinon", quest.Name, quest.QuestGiver)
+			}
 			items := make([]string, 0, len(quest.Requirements))
 			for _, requirement := range quest.Requirements {
 				items = append(items, fmt.Sprintf("%d:%s", requirement.Quantity, requirement.Name))

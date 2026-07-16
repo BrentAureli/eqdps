@@ -158,6 +158,7 @@ func enrichFromClassPages(db *database) error {
 		if npc == "" {
 			continue
 		}
+		npc = canonicalQuestGiver(npc)
 		updated := 0
 		source := response.Parse.Wikitext
 		headings := testRE.FindAllStringSubmatchIndex(source, -1)
@@ -262,7 +263,7 @@ func extract(response apiResponse) (database, error) {
 
 	db := database{SchemaVersion: 1, Source: sourceURL, SourcePageID: response.Parse.PageID, SourceRevision: response.Parse.Revision}
 	for _, classMatch := range classRE.FindAllStringSubmatch(match[1], -1) {
-		entry := class{Name: clean(classMatch[1]), QuestNPC: clean(classMatch[2])}
+		entry := class{Name: clean(classMatch[1]), QuestNPC: canonicalQuestGiver(clean(classMatch[2]))}
 		for _, rawRow := range strings.Split(classMatch[3], "\n|-") {
 			cells := tableCells(rawRow)
 			if len(cells) < 6 || strings.EqualFold(clean(cells[0]), "Quest") {
@@ -270,7 +271,7 @@ func extract(response apiResponse) (database, error) {
 			}
 			q := quest{
 				Name:         clean(cells[0]),
-				QuestGiver:   clean(cells[1]),
+				QuestGiver:   canonicalQuestGiver(clean(cells[1])),
 				Requirements: append(requirements(cells[3], "rune"), requirements(cells[4], "item")...),
 				Rewards:      rewards(strings.Join(cells[5:], "\n")),
 			}
@@ -288,6 +289,13 @@ func extract(response apiResponse) (database, error) {
 		return database{}, fmt.Errorf("expected 16 classes, extracted %d", len(db.Classes))
 	}
 	return db, nil
+}
+
+func canonicalQuestGiver(name string) string {
+	if name == "Magi Frinon" {
+		return "Magus Frinon"
+	}
+	return name
 }
 
 func tableCells(row string) []string {

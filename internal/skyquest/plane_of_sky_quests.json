@@ -945,14 +945,14 @@
     },
     {
       "name": "Magician",
-      "quest_npc": "Magi Frinon",
+      "quest_npc": "Magus Frinon",
       "source": "https://eqlwiki.com/Magician_Plane_of_Sky_Tests",
       "source_page_id": 15126,
       "source_revision": 124794,
       "quests": [
         {
           "name": "Magician Test of Clarification",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Lena",
@@ -975,7 +975,7 @@
         },
         {
           "name": "Magician Test of Empowerment",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Neza",
@@ -998,7 +998,7 @@
         },
         {
           "name": "Magician Test of Shielding",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Azia",
@@ -1021,7 +1021,7 @@
         },
         {
           "name": "Magician Test of Summoning",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Dena",
@@ -1044,7 +1044,7 @@
         },
         {
           "name": "Magician Test of Interpretation",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Ena",
@@ -1067,7 +1067,7 @@
         },
         {
           "name": "Magician Test of Gesticulation",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Jaka",
@@ -1097,7 +1097,7 @@
         },
         {
           "name": "Magician Test of Displacement",
-          "quest_giver": "Magi Frinon",
+          "quest_giver": "Magus Frinon",
           "requirements": [
             {
               "name": "Wind Rune Heda",
