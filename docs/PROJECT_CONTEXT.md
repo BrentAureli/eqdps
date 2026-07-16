@@ -181,11 +181,11 @@ first-line fingerprint and file-size check reject unsafe automatic recovery
 after log replacement or truncation. Combat `--back`, `--since`, and history
 reloads never mutate Sky holdings.
 
-Press `p` to open the read-only quest tracker. It lists quests by class, puts
-quests with every required item in a ready-to-turn-in section, and shows owned
-and required quantities plus known source hints and rewards. `Enter` expands a
-class or quest, `a` expands or collapses everything, and `p` or `Esc` returns to
-the combat view.
+Press `p` to open the read-only quest tracker. Its flat, wiki-style table lists
+every quest and required item under its class, puts quests with every required
+item in a ready-to-turn-in section, and shows owned and required quantities plus
+known source hints and rewards. Arrow and page keys browse the table; `p` or
+`Esc` returns to the combat view.
 
 The state is an evidence-based estimate rather than an authoritative EverQuest
 inventory snapshot. Logged destruction is handled, but trades, quest turn-ins,

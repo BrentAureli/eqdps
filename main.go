@@ -376,9 +376,7 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	skyTable := tview.NewTable().SetBorders(false).SetSelectable(true, false).SetFixed(1, 0)
 	skyHeader := tview.NewTextView().SetDynamicColors(true)
 	skyFooter := tview.NewTextView().SetDynamicColors(true).
-		SetText("[gray]Enter[::-] details   [gray]a[::-] toggle all   [gray]p/Esc[::-] close")
-	skyExpanded := make(map[string]bool)
-	skyExpandableRows := make(map[int]string)
+		SetText("[gray]↑/↓ PgUp/PgDn[::-] browse   [gray]p/Esc[::-] close")
 	character, server, _ := skyquest.CharacterIdentity(logPath)
 	renderSkyView = func() {
 		skyMu.Lock()
@@ -391,7 +389,7 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		inventory := active.Inventory()
 		skyMu.Unlock()
 		skyHeader.SetText(fmt.Sprintf("[::b]Plane of Sky Quest Tracker[::-]  %s / %s", character, server))
-		skyExpandableRows = fillSkyQuestTable(skyTable, progress, inventory, skyExpanded)
+		fillSkyQuestTable(skyTable, progress, inventory)
 	}
 	skyLayout := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -694,28 +692,9 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 				closeSkyView()
 				return nil
 			}
-			if event.Key() == tcell.KeyEnter {
-				row, _ := skyTable.GetSelection()
-				if key, ok := skyExpandableRows[row]; ok {
-					skyExpanded[key] = !skyExpanded[key]
-					renderSkyView()
-				}
-				return nil
-			}
 			switch event.Rune() {
 			case 'p', 'P':
 				closeSkyView()
-				return nil
-			case 'a', 'A':
-				skyMu.Lock()
-				active := skyTracker
-				var progress []skyquest.QuestProgress
-				if active != nil {
-					progress = active.QuestProgress()
-				}
-				skyMu.Unlock()
-				toggleSkyQuestTree(progress, skyExpanded)
-				renderSkyView()
 				return nil
 			}
 			return event
@@ -1091,9 +1070,9 @@ func showProgressOverlay(app *tview.Application, pages *tview.Pages, page, title
 	return view
 }
 
-func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, inventory map[string]int, expanded map[string]bool) map[int]string {
+func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, inventory map[string]int) {
 	table.Clear()
-	headers := []string{"Class / Quest / Requirement", "Status", "Owned", "Need", "Source / Reward"}
+	headers := []string{"Quest / Required Item", "Status", "Have", "Need", "Source / Reward"}
 	for column, header := range headers {
 		cell := tview.NewTableCell(header).SetTextColor(tcell.ColorYellow).SetSelectable(false)
 		if column == 0 {
@@ -1106,7 +1085,6 @@ func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, in
 		table.SetCell(0, column, cell)
 	}
 
-	expandableRows := make(map[int]string)
 	row := 1
 	ready := make([]skyquest.QuestProgress, 0)
 	for _, item := range progress {
@@ -1138,48 +1116,35 @@ func fillSkyQuestTable(table *tview.Table, progress []skyquest.QuestProgress, in
 			}
 			end++
 		}
-		classKey := "class:" + className
-		arrow := "▶"
-		if expanded[classKey] {
-			arrow = "▼"
+		giver := ""
+		if index < end {
+			giver = progress[index].Quest.QuestGiver
 		}
-		setSkyRow(table, row, arrow+" "+className, fmt.Sprintf("%d ready / %d", readyCount, end-index), "", "", "", tcell.ColorWhite, true)
-		expandableRows[row] = classKey
+		setSkyRow(table, row, className+" — "+giver, fmt.Sprintf("%d ready / %d", readyCount, end-index), "", "", "", tcell.ColorYellow, false)
 		row++
-		if expanded[classKey] {
-			for _, item := range progress[index:end] {
-				questKey := "quest:" + className + ":" + item.Quest.Name
-				questArrow := "  ▶"
-				if expanded[questKey] {
-					questArrow = "  ▼"
+		for _, item := range progress[index:end] {
+			status := fmt.Sprintf("missing %d", len(item.Missing))
+			color := tcell.ColorWhite
+			if item.Ready {
+				status = "READY"
+				color = tcell.ColorGreen
+			}
+			setSkyRow(table, row, "  "+item.Quest.Name, status, "", "", "Reward: "+strings.Join(item.Quest.Rewards, " / "), color, true)
+			row++
+			for _, requirement := range item.Quest.Requirements {
+				owned := inventory[requirement.Name]
+				mark := "✗"
+				requirementColor := tcell.ColorRed
+				if owned >= requirement.Quantity {
+					mark = "✓"
+					requirementColor = tcell.ColorGreen
 				}
-				status := fmt.Sprintf("missing %d", len(item.Missing))
-				color := tcell.ColorWhite
-				if item.Ready {
-					status = "READY"
-					color = tcell.ColorGreen
-				}
-				setSkyRow(table, row, questArrow+" "+item.Quest.Name, status, "", "", questDetails(item.Quest), color, true)
-				expandableRows[row] = questKey
+				setSkyRow(table, row, "      "+mark+" "+requirement.Name, "", fmt.Sprint(owned), fmt.Sprint(requirement.Quantity), skyRequirementSource(requirement), requirementColor, false)
 				row++
-				if expanded[questKey] {
-					for _, requirement := range item.Quest.Requirements {
-						owned := inventory[requirement.Name]
-						mark := "✗"
-						requirementColor := tcell.ColorRed
-						if owned >= requirement.Quantity {
-							mark = "✓"
-							requirementColor = tcell.ColorGreen
-						}
-						setSkyRow(table, row, "      "+mark+" "+requirement.Name, "", fmt.Sprint(owned), fmt.Sprint(requirement.Quantity), skyRequirementSource(requirement), requirementColor, false)
-						row++
-					}
-				}
 			}
 		}
 		index = end
 	}
-	return expandableRows
 }
 
 func setSkyRow(table *tview.Table, row int, name, status, owned, needed, detail string, color tcell.Color, selectable bool) {
@@ -1212,29 +1177,6 @@ func skyRequirementSource(requirement skyquest.Requirement) string {
 		return "Plane of Sky random drop"
 	}
 	return "Plane of Sky"
-}
-
-func toggleSkyQuestTree(progress []skyquest.QuestProgress, expanded map[string]bool) {
-	keys := make([]string, 0)
-	seenClasses := make(map[string]bool)
-	for _, item := range progress {
-		classKey := "class:" + item.Class
-		if !seenClasses[classKey] {
-			keys = append(keys, classKey)
-			seenClasses[classKey] = true
-		}
-		keys = append(keys, "quest:"+item.Class+":"+item.Quest.Name)
-	}
-	closeAll := false
-	for _, key := range keys {
-		if expanded[key] {
-			closeAll = true
-			break
-		}
-	}
-	for _, key := range keys {
-		expanded[key] = !closeAll
-	}
 }
 
 func fightTitle(fight *combat.Fight, current bool) string {
