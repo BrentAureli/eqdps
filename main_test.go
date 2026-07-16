@@ -51,11 +51,47 @@ func TestRestoreTablePositionFollowsLogicalRowAndKeepsViewport(t *testing.T) {
 	table.Select(7, 0)
 	table.SetOffset(4, 2)
 
-	restoreTablePosition(table, map[int]string{25: "selected", 7: "child"}, "selected", 4, 2)
+	restoreTablePosition(table, map[int]string{25: "selected", 7: "child"}, "selected", 4, 2, false)
 	row, _ := table.GetSelection()
 	rowOffset, columnOffset := table.GetOffset()
 	if row != 25 || rowOffset != 4 || columnOffset != 2 {
 		t.Fatalf("unexpected restored position: row=%d offset=%d,%d", row, rowOffset, columnOffset)
+	}
+}
+
+func TestRestoreTablePositionTracksNewRowsWhenViewWasAtEnd(t *testing.T) {
+	table := tview.NewTable().SetSelectable(true, false)
+	table.SetRect(0, 0, 80, 10)
+	for row := 0; row < 30; row++ {
+		table.SetCellSimple(row, 0, "row")
+	}
+	table.Select(20, 0)
+	table.SetOffset(20, 0)
+
+	for row := 30; row < 40; row++ {
+		table.SetCellSimple(row, 0, "expanded row")
+	}
+	restoreTablePosition(table, map[int]string{20: "selected"}, "selected", 20, 0, true)
+
+	row, _ := table.GetSelection()
+	rowOffset, _ := table.GetOffset()
+	if row != 20 || rowOffset != table.GetRowCount() {
+		t.Fatalf("expected selection to remain at row 20 and viewport to track end, got row=%d offset=%d", row, rowOffset)
+	}
+}
+
+func TestTableViewAtEnd(t *testing.T) {
+	table := tview.NewTable()
+	table.SetRect(0, 0, 80, 10)
+	for row := 0; row < 30; row++ {
+		table.SetCellSimple(row, 0, "row")
+	}
+
+	if !tableViewAtEnd(table, 20) {
+		t.Fatal("expected viewport ending at the last row to be detected")
+	}
+	if tableViewAtEnd(table, 19) {
+		t.Fatal("viewport before the last row was detected as being at the end")
 	}
 }
 

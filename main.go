@@ -927,9 +927,10 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 			row, _ := table.GetSelection()
 			if key, ok := expandableRows[row]; ok {
 				rowOffset, columnOffset := table.GetOffset()
+				wasAtEnd := tableViewAtEnd(table, rowOffset)
 				expandedRows[key] = !expandedRows[key]
 				render()
-				restoreTablePosition(table, expandableRows, key, rowOffset, columnOffset)
+				restoreTablePosition(table, expandableRows, key, rowOffset, columnOffset, wasAtEnd)
 				return nil
 			}
 		}
@@ -955,12 +956,13 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 				return nil
 			}
 			rowOffset, columnOffset := table.GetOffset()
+			wasAtEnd := tableViewAtEnd(table, rowOffset)
 			mu.Lock()
 			sections := filterSections(tracker.DisplaySections(), fightFilter)
 			toggleRowTree(key, sections, expandedRows)
 			mu.Unlock()
 			render()
-			restoreTablePosition(table, expandableRows, key, rowOffset, columnOffset)
+			restoreTablePosition(table, expandableRows, key, rowOffset, columnOffset, wasAtEnd)
 			return nil
 		case 'o', 'O':
 			openHistoryModal()
@@ -1017,11 +1019,23 @@ func resetTableView(table *tview.Table) {
 	table.Select(1, 0)
 }
 
-func restoreTablePosition(table *tview.Table, expandableRows map[int]string, selectedKey string, rowOffset, columnOffset int) {
+func tableViewAtEnd(table *tview.Table, rowOffset int) bool {
+	_, _, _, height := table.GetInnerRect()
+	return height > 0 && rowOffset+height >= table.GetRowCount()
+}
+
+func restoreTablePosition(table *tview.Table, expandableRows map[int]string, selectedKey string, rowOffset, columnOffset int, wasAtEnd bool) {
 	for row, key := range expandableRows {
 		if key == selectedKey {
-			table.Select(row, 0)
-			table.SetOffset(rowOffset, columnOffset)
+			selectedRow, selectedColumn := table.GetSelection()
+			if selectedRow != row || selectedColumn != 0 {
+				table.Select(row, 0)
+			}
+			if wasAtEnd {
+				table.ScrollToEnd()
+			} else {
+				table.SetOffset(rowOffset, columnOffset)
+			}
 			return
 		}
 	}
