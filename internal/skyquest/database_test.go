@@ -26,6 +26,11 @@ func TestEmbeddedDatabaseHasCompleteClassQuestTables(t *testing.T) {
 			if class.Name == "Necromancer" && quest.QuestGiver != "Drakis Bloodcaster" {
 				t.Errorf("Necromancer quest %q giver = %q, want Drakis Bloodcaster", quest.Name, quest.QuestGiver)
 			}
+			for _, requirement := range quest.Requirements {
+				if requirement.Kind != "rune" && requirement.DropsFrom == "" {
+					t.Errorf("requirement %q in %q has no drop source", requirement.Name, quest.Name)
+				}
+			}
 		}
 	}
 	if got, want := quests, 95; got != want {

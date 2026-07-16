@@ -1203,6 +1203,9 @@ func skyRequirementSource(requirement skyquest.Requirement) string {
 	if requirement.Kind == "rune" {
 		return "Plane of Sky random drop"
 	}
+	if requirement.DropsFrom != "" {
+		return requirement.DropsFrom
+	}
 	return "Plane of Sky"
 }
 

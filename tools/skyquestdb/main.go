@@ -66,6 +66,7 @@ var (
 	rewardRE  = regexp.MustCompile(`\{\{:([^}|]+)`)
 	hintRE    = regexp.MustCompile(`\(([2-8])-([^)]+)\)`)
 	tagRE     = regexp.MustCompile(`<[^>]+>`)
+	dropsRE   = regexp.MustCompile(`(?s)\|dropsfrom\s*=\s*(.*?)(?:\n\|[A-Za-z_]+\s*=|\}\})`)
 	npcRE     = regexp.MustCompile(`(?i)Find\s+(?:\[\[)?([^\]\n]+?)(?:\]\])?\s+and Hail`)
 	talkRE    = regexp.MustCompile(`(?i)Talk to\s+(?:\[\[)?([^\]\n]+?)(?:\]\])?\s+in the`)
 	testRE    = regexp.MustCompile(`(?m)^==+\s*((?:\w+(?:\s+\w+)*\s+)?Test of [^=\n]+?)\s*==+\s*$`)
@@ -104,6 +105,9 @@ func main() {
 	}
 	if *input == "" {
 		if err := enrichFromClassPages(&db); err != nil {
+			fatal(err)
+		}
+		if err := enrichItemSources(&db); err != nil {
 			fatal(err)
 		}
 	}
@@ -190,6 +194,55 @@ func sameTest(left, right string) bool {
 		return strings.Join(words, " ")
 	}
 	return normalize(left) == normalize(right)
+}
+
+func enrichItemSources(db *database) error {
+	cache := make(map[string]string)
+	for classIndex := range db.Classes {
+		for questIndex := range db.Classes[classIndex].Quests {
+			quest := &db.Classes[classIndex].Quests[questIndex]
+			for requirementIndex := range quest.Requirements {
+				requirement := &quest.Requirements[requirementIndex]
+				if requirement.Kind == "rune" || requirement.Island > 0 || requirement.DropsFrom != "" {
+					continue
+				}
+				drops, cached := cache[requirement.Name]
+				if !cached {
+					var response apiResponse
+					page := strings.ReplaceAll(requirement.Name, " ", "_")
+					if err := fetchPage(page, &response); err != nil {
+						return fmt.Errorf("fetch item page for %s: %w", requirement.Name, err)
+					}
+					drops = itemDrops(response.Parse.Wikitext)
+					if drops == "" {
+						return fmt.Errorf("no item-page drop sources found for %s", requirement.Name)
+					}
+					cache[requirement.Name] = drops
+				}
+				requirement.DropsFrom = drops
+				requirement.SourceHint = "EQL Wiki item page"
+			}
+		}
+	}
+	return nil
+}
+
+func itemDrops(wikitext string) string {
+	match := dropsRE.FindStringSubmatch(wikitext)
+	if match == nil {
+		return ""
+	}
+	var drops []string
+	seen := make(map[string]bool)
+	for _, link := range linkRE.FindAllStringSubmatch(match[1], -1) {
+		name := clean(link[1])
+		if name == "" || strings.EqualFold(name, "Plane of Sky") || seen[name] {
+			continue
+		}
+		seen[name] = true
+		drops = append(drops, name)
+	}
+	return strings.Join(drops, " / ")
 }
 
 func decodeFile(path string, target *apiResponse) error {

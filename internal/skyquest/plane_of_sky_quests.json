@@ -121,7 +121,9 @@
             {
               "name": "Efreeti War Horn",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air / The Hand of Veeshan",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -149,7 +151,9 @@
             {
               "name": "Efreeti War Spear",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -238,7 +242,9 @@
             {
               "name": "Brass Knuckles",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air / The Hand of Veeshan",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -319,7 +325,9 @@
             {
               "name": "Efreeti Standard",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -439,7 +447,9 @@
             {
               "name": "Efreeti Great Staff",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Eye of Veeshan / Noble Dojorn",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -568,7 +578,9 @@
             {
               "name": "Efreeti Mace",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -596,7 +608,9 @@
             {
               "name": "Efreeti Standard",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -679,7 +693,9 @@
             {
               "name": "Efreeti Statuette",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "an essence harvester / an essence tamer",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -762,7 +778,9 @@
             {
               "name": "Efreeti Scimitar",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -914,7 +932,9 @@
             {
               "name": "Efreeti Wind Staff",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / The Hand of Veeshan",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1066,7 +1086,9 @@
             {
               "name": "Efreeti Magi Staff",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1236,7 +1258,9 @@
             {
               "name": "Brass Knuckles",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air / The Hand of Veeshan",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1411,7 +1435,9 @@
             {
               "name": "Efreeti Great Staff",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Eye of Veeshan / Noble Dojorn",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1486,7 +1512,9 @@
               "name": "Golden Hilt",
               "kind": "item",
               "quantity": 1,
-              "no_drop": true
+              "no_drop": true,
+              "drops_from": "a greater sphinx / a heartsbane drake / an undine spirit",
+              "source_hint": "EQL Wiki item page"
             },
             {
               "name": "Sphinx Claw",
@@ -1523,7 +1551,9 @@
             {
               "name": "Efreeti Zweihander",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1652,7 +1682,9 @@
             {
               "name": "Efreeti Long Sword",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1680,7 +1712,9 @@
             {
               "name": "Efreeti War Bow",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air / The Hand of Veeshan",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -1956,7 +1990,9 @@
             {
               "name": "Efreeti War Shield",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2016,7 +2052,9 @@
             {
               "name": "Efreeti War Axe",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2122,7 +2160,9 @@
             {
               "name": "Efreeti War Club",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2142,7 +2182,9 @@
               "name": "Bixie Essence",
               "kind": "item",
               "quantity": 1,
-              "no_drop": true
+              "no_drop": true,
+              "drops_from": "Bazzzazzt / Bizazzzt / Bzzzt",
+              "source_hint": "EQL Wiki item page"
             },
             {
               "name": "Spiritualist`s Ring",
@@ -2179,7 +2221,9 @@
             {
               "name": "Efreeti War Maul",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2285,7 +2329,9 @@
             {
               "name": "Efreeti Belt",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / The Hand of Veeshan",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2345,7 +2391,9 @@
             {
               "name": "Efreeti Battle Axe",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2451,7 +2499,9 @@
             {
               "name": "Efreeti Statuette",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "an essence harvester / an essence tamer",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [
@@ -2502,7 +2552,9 @@
             {
               "name": "Efreeti War Staff",
               "kind": "item",
-              "quantity": 1
+              "quantity": 1,
+              "drops_from": "The Hand of Veeshan / Noble Dojorn / Overseer of Air",
+              "source_hint": "EQL Wiki item page"
             }
           ],
           "rewards": [

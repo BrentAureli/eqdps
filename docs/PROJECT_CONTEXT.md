@@ -169,6 +169,11 @@ offline and single-executable. The generated data currently contains 16
 classes, 95 quests, 222 requirements, and 128 unique required items. Source page
 and revision metadata are retained in the JSON.
 
+Requirements without an overview drop annotation are enriched from their EQL
+Wiki item pages during generation. The item-page `dropsfrom` NPC list is stored
+without the redundant Plane of Sky zone link, replacing the former generic
+`Plane of Sky` display for Efreeti weapons and other components.
+
 The tracker adds only exact known requirements while the last parsed zone is
 `The Plane of Sky`. Normally retained loot and loot stored directly in the
 currency tab count as owned. Items immediately sold, including `sold it for
