@@ -43,47 +43,43 @@ var palette = struct {
 }
 
 type shell struct {
-	theme          *material.Theme
-	fightList      widget.List
-	workspace      int
-	activeMenu     int
-	activeSub      int
-	treeClicks     map[string]*widget.Clickable
-	expanded       map[string]bool
-	window         *app.Window
-	settings       guiSettings
-	currentLog     string
-	statusText     string
-	fileChosen     chan fileChoice
-	combatUpdates  chan combatUpdate
-	logCancel      chan struct{}
-	loading        bool
-	loadBytes      int64
-	loadTotal      int64
-	loadLines      int
-	overlay        *combatOverlay
-	overlayClosed  chan *combatOverlay
-	waylandHelp    bool
-	openAfterHelp  bool
-	rememberHelp   bool
-	helpClose      widget.Clickable
-	mainScale      widget.Float
-	dpsScale       widget.Float
-	dpsOpacity     widget.Float
-	prefsDirty     bool
-	xpSnapshot     xp.Snapshot
-	parserState    string
-	allFights      []fakeFightSection
-	fightFilter    string
-	filterOriginal string
-	filterOpen     bool
-	filterEditor   widget.Editor
-	filterApply    widget.Clickable
-	filterClear    widget.Clickable
-	filterCancel   widget.Clickable
-	fights         []fakeFightSection
-	menus          []menu
-	rail           []railItem
+	theme         *material.Theme
+	fightList     widget.List
+	workspace     int
+	activeMenu    int
+	activeSub     int
+	treeClicks    map[string]*widget.Clickable
+	expanded      map[string]bool
+	window        *app.Window
+	settings      guiSettings
+	currentLog    string
+	statusText    string
+	fileChosen    chan fileChoice
+	combatUpdates chan combatUpdate
+	logCancel     chan struct{}
+	loading       bool
+	loadBytes     int64
+	loadTotal     int64
+	loadLines     int
+	overlay       *combatOverlay
+	overlayClosed chan *combatOverlay
+	waylandHelp   bool
+	openAfterHelp bool
+	rememberHelp  bool
+	helpClose     widget.Clickable
+	mainScale     widget.Float
+	dpsScale      widget.Float
+	dpsOpacity    widget.Float
+	prefsDirty    bool
+	xpSnapshot    xp.Snapshot
+	parserState   string
+	allFights     []fakeFightSection
+	fightFilter   string
+	filterEditor  widget.Editor
+	filterClear   widget.Clickable
+	fights        []fakeFightSection
+	menus         []menu
+	rail          []railItem
 }
 
 type menu struct {
@@ -287,7 +283,6 @@ func (s *shell) layout(gtx layout.Context) layout.Dimensions {
 		layout.Stacked(s.layoutOpenMenu),
 		layout.Stacked(s.layoutOpenSubmenu),
 		layout.Expanded(s.layoutLoadingOverlay),
-		layout.Expanded(s.layoutFilterDialog),
 		layout.Expanded(s.layoutWaylandHelp),
 	)
 }
@@ -354,9 +349,11 @@ func (s *shell) update(gtx layout.Context) {
 		}
 	default:
 	}
-	if s.filterOpen {
-		s.updateFilterDialog(gtx)
-		return
+	if s.filterClear.Clicked(gtx) {
+		s.fightFilter = ""
+		s.filterEditor.SetText("")
+		s.applyFightFilter()
+		s.fightList.ScrollTo(0)
 	}
 	for index := range s.menus {
 		if s.menus[index].click.Clicked(gtx) {
@@ -486,9 +483,7 @@ func (s *shell) activateItem(item menuItem) {
 	case "current":
 		s.showCurrentFight()
 	case "filter":
-		s.filterOriginal = s.fightFilter
-		s.filterEditor.SetText(s.fightFilter)
-		s.filterOpen = true
+		s.workspace = 0
 	case "exit":
 		s.window.Perform(system.ActionClose)
 	}
@@ -623,6 +618,7 @@ func (s *shell) layoutWorkspace(gtx layout.Context) layout.Dimensions {
 
 func (s *shell) layoutDamageMeter(gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(s.layoutFightFilterBar),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return s.layoutCombatRow(gtx, fakeCombatant{}, true, false)
 		}),

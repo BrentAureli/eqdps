@@ -2,15 +2,14 @@ package main
 
 import (
 	"fmt"
-	"image"
 	"image/color"
 	"strings"
 
 	"gioui.org/font"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/text"
 	"gioui.org/unit"
-	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"github.com/uija/eqdps/internal/xp"
 )
@@ -44,73 +43,38 @@ func (s *shell) showCurrentFight() {
 	s.fightList.ScrollTo(newest)
 }
 
-func (s *shell) updateFilterDialog(gtx layout.Context) {
-	switch {
-	case s.filterApply.Clicked(gtx):
-		s.fightFilter = strings.TrimSpace(s.filterEditor.Text())
-		s.applyFightFilter()
-		s.fightList.ScrollTo(0)
-		s.filterOpen = false
-	case s.filterClear.Clicked(gtx):
-		s.fightFilter = ""
-		s.filterEditor.SetText("")
-		s.applyFightFilter()
-		s.fightList.ScrollTo(0)
-		s.filterOpen = false
-	case s.filterCancel.Clicked(gtx):
-		s.fightFilter = s.filterOriginal
-		s.applyFightFilter()
-		s.fightList.ScrollTo(0)
-		s.filterOpen = false
-	}
-}
-
-func (s *shell) layoutFilterDialog(gtx layout.Context) layout.Dimensions {
-	if !s.filterOpen {
-		return layout.Dimensions{}
-	}
-	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(520)), gtx.Dp(unit.Dp(210)))
-		gtx.Constraints.Max = gtx.Constraints.Min
-		return outline(gtx, palette.line, func(gtx layout.Context) layout.Dimensions {
-			fill(gtx, palette.panel)
-			return layout.UniformInset(unit.Dp(22)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return labelWeight(gtx, s.theme, "Filter fights", unit.Sp(21), palette.text, text.Start, font.SemiBold)
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return inset(0, unit.Dp(16)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							editor := material.Editor(s.theme, &s.filterEditor, "Mob name contains…")
-							editor.TextSize = unit.Sp(17) * s.theme.TextSize / 16
-							editor.Color = palette.text
-							editor.HintColor = palette.muted
-							return outline(gtx, palette.line, func(gtx layout.Context) layout.Dimensions {
-								return layout.UniformInset(unit.Dp(9)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-									dimensions := editor.Layout(gtx)
-									s.previewFightFilter()
-									return dimensions
-								})
-							})
-						})
-					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return dialogButton(gtx, s.theme, &s.filterClear, "Clear", false)
-								}),
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return dialogButton(gtx, s.theme, &s.filterCancel, "Cancel", false)
-								}),
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return dialogButton(gtx, s.theme, &s.filterApply, "Apply", true)
-								}),
-							)
-						})
-					}),
-				)
-			})
+func (s *shell) layoutFightFilterBar(gtx layout.Context) layout.Dimensions {
+	gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(42))
+	gtx.Constraints.Max.Y = gtx.Constraints.Min.Y
+	fill(gtx, palette.panel)
+	return centerContent(gtx, func(gtx layout.Context) layout.Dimensions {
+		return inset(unit.Dp(14), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return labelWeight(gtx, s.theme, "FILTER", unit.Sp(14), palette.muted, text.Start, font.SemiBold)
+				}),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return inset(unit.Dp(14), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						editor := material.Editor(s.theme, &s.filterEditor, "Type a mob name…")
+						editor.TextSize = unit.Sp(16) * s.theme.TextSize / 16
+						editor.Color = palette.text
+						editor.HintColor = palette.muted
+						dimensions := editor.Layout(gtx)
+						s.previewFightFilter()
+						return dimensions
+					})
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return s.filterClear.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						pointer.CursorPointer.Add(gtx.Ops)
+						foreground := palette.muted
+						if s.fightFilter != "" {
+							foreground = palette.accent
+						}
+						return labelWeight(gtx, s.theme, "Clear", unit.Sp(14), foreground, text.End, font.SemiBold)
+					})
+				}),
+			)
 		})
 	})
 }
@@ -126,21 +90,6 @@ func (s *shell) previewFightFilter() {
 	if s.window != nil {
 		s.window.Invalidate()
 	}
-}
-
-func dialogButton(gtx layout.Context, theme *material.Theme, click *widget.Clickable, value string, accent bool) layout.Dimensions {
-	return inset(unit.Dp(4), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			fill(gtx, palette.panelAlt)
-			color := palette.text
-			if accent {
-				color = palette.accent
-			}
-			return layout.UniformInset(unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return labelWeight(gtx, theme, value, unit.Sp(15), color, text.Middle, font.SemiBold)
-			})
-		})
-	})
 }
 
 func xpStatusText(snapshot xp.Snapshot, filter string) string {
