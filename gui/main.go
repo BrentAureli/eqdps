@@ -38,6 +38,7 @@ var palette = struct {
 
 type shell struct {
 	theme      *material.Theme
+	fightList  layout.List
 	workspace  int
 	activeMenu int
 	menus      []menu
@@ -71,6 +72,12 @@ type fakeCombatant struct {
 	accent            bool
 }
 
+type fakeFightSection struct {
+	name, status, duration string
+	current                bool
+	combatants             []fakeCombatant
+}
+
 var fakeFight = []fakeCombatant{
 	{name: "You", damage: 4789, dps: 165, hits: 56, crits: 5, active: "00:29", accent: true},
 	{name: "Gigglemage", damage: 3779, dps: 130, sdps: 126, hits: 57, crits: 1, active: "00:29"},
@@ -78,6 +85,18 @@ var fakeFight = []fakeCombatant{
 	{name: "Moth", damage: 2918, dps: 112, sdps: 97, hits: 97, crits: 21, active: "00:26"},
 	{name: "Zabektik", damage: 571, dps: 19, sdps: 19, hits: 16, active: "00:30"},
 	{name: "a rock golem", damage: 1492, dps: 50, hits: 17, active: "00:30"},
+}
+
+var fakeFights = []fakeFightSection{
+	{name: "a rock golem", status: "current fight", duration: "00:30", current: true, combatants: fakeFight},
+	{name: "Refugee Splitpaw", status: "slain by You", duration: "00:21", combatants: []fakeCombatant{
+		{name: "You", damage: 699, dps: 33, hits: 16, active: "00:21", accent: true},
+		{name: "Refugee Splitpaw", damage: 207, dps: 10, hits: 5, active: "00:20"},
+	}},
+	{name: "a gnoll elite", status: "slain by You", duration: "00:24", combatants: []fakeCombatant{
+		{name: "You", damage: 764, dps: 32, hits: 18, crits: 1, active: "00:24", accent: true},
+		{name: "a gnoll elite", damage: 121, dps: 7, hits: 9, active: "00:18"},
+	}},
 }
 
 func main() {
@@ -117,6 +136,7 @@ func newShell() *shell {
 	theme.Palette.Bg = palette.window
 	return &shell{
 		theme:      theme,
+		fightList:  layout.List{Axis: layout.Vertical},
 		activeMenu: -1,
 		menus: []menu{
 			{name: "File", items: []menuItem{{name: "Open logfile…", detail: "Choose an EverQuest log", enabled: true}, {name: "Recent logfiles", detail: "No recent files", enabled: false}, {name: "Exit", enabled: true}}},
@@ -125,7 +145,7 @@ func newShell() *shell {
 			{name: "Tools", items: []menuItem{{name: "Preferences…", enabled: true}}},
 			{name: "Help", items: []menuItem{{name: "About eqdps", enabled: true}}},
 		},
-		rail: []railItem{{short: "DPS", name: "Damage Meter"}, {short: "LOG", name: "Combat History"}, {short: "SKY", name: "Plane of Sky"}, {short: "SET", name: "Settings"}},
+		rail: []railItem{{short: "DPS", name: "Combat Log"}, {short: "SKY", name: "Plane of Sky"}, {short: "SET", name: "Settings"}},
 	}
 }
 
@@ -220,10 +240,8 @@ func (s *shell) layoutRail(gtx layout.Context) layout.Dimensions {
 func (s *shell) layoutWorkspace(gtx layout.Context) layout.Dimensions {
 	switch s.workspace {
 	case 1:
-		return s.layoutPlaceholder(gtx, "Combat History", "Completed fights and history replay will live here.")
-	case 2:
 		return s.layoutPlaceholder(gtx, "Plane of Sky", "Quest progress will use this dedicated workspace.")
-	case 3:
+	case 2:
 		return s.layoutPlaceholder(gtx, "Settings", "Application, logfile, and overlay preferences will live here.")
 	default:
 		return s.layoutDamageMeter(gtx)
@@ -231,57 +249,44 @@ func (s *shell) layoutWorkspace(gtx layout.Context) layout.Dimensions {
 }
 
 func (s *shell) layoutDamageMeter(gtx layout.Context) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Baseline}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return label(gtx, s.theme, "a rock golem", unit.Sp(26), palette.text, text.Start)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return inset(unit.Dp(12), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return label(gtx, s.theme, "slain by You", unit.Sp(15), palette.muted, text.Start)
-					})
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return label(gtx, s.theme, "00:30", unit.Sp(17), palette.accent, text.End)
-					})
-				}),
-			)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return inset(0, unit.Dp(14)).Layout(gtx, s.layoutFightSummary)
-		}),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return s.layoutCombatRow(gtx, fakeCombatant{name: "COMBATANT", damage: -1}, true, false)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return separator(gtx) }),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutCombatRows(gtx) }),
-			)
-		}),
-	)
+	return s.fightList.Layout(gtx, len(fakeFights), func(gtx layout.Context, index int) layout.Dimensions {
+		fight := fakeFights[index]
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutFightHeader(gtx, fight) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return s.layoutCombatRow(gtx, fakeCombatant{}, true, false)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return separator(gtx) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutCombatRows(gtx, fight.combatants) }),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(14)))}
+			}),
+		)
+	})
 }
 
-func (s *shell) layoutFightSummary(gtx layout.Context) layout.Dimensions {
-	gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(40))
+func (s *shell) layoutFightHeader(gtx layout.Context, fight fakeFightSection) layout.Dimensions {
+	gtx.Constraints.Min.Y = gtx.Dp(unit.Dp(42))
 	gtx.Constraints.Max.Y = gtx.Constraints.Min.Y
-	fill(gtx, palette.panel)
+	fill(gtx, palette.panelAlt)
 	return centerContent(gtx, func(gtx layout.Context) layout.Dimensions {
 		return inset(unit.Dp(14), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return label(gtx, s.theme, "6 combatants", unit.Sp(17), palette.text, text.Start)
+					return labelWeight(gtx, s.theme, fight.name, unit.Sp(18), palette.text, text.Start, font.SemiBold)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return inset(unit.Dp(22), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return label(gtx, s.theme, "13,388 total damage", unit.Sp(17), palette.muted, text.Start)
+					return inset(unit.Dp(14), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						statusColor := palette.muted
+						if fight.current {
+							statusColor = palette.success
+						}
+						return label(gtx, s.theme, fight.status, unit.Sp(15), statusColor, text.Start)
 					})
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return layout.E.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return label(gtx, s.theme, "CURRENT FIGHT", unit.Sp(15), palette.success, text.End)
+						return label(gtx, s.theme, fight.duration, unit.Sp(16), palette.accent, text.End)
 					})
 				}),
 			)
@@ -289,9 +294,9 @@ func (s *shell) layoutFightSummary(gtx layout.Context) layout.Dimensions {
 	})
 }
 
-func (s *shell) layoutCombatRows(gtx layout.Context) layout.Dimensions {
-	children := make([]layout.FlexChild, 0, len(fakeFight))
-	for index, combatant := range fakeFight {
+func (s *shell) layoutCombatRows(gtx layout.Context, combatants []fakeCombatant) layout.Dimensions {
+	children := make([]layout.FlexChild, 0, len(combatants))
+	for index, combatant := range combatants {
 		index, combatant := index, combatant
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return s.layoutCombatRow(gtx, combatant, false, index%2 == 1)
