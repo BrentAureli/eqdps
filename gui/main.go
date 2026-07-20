@@ -290,7 +290,7 @@ func (s *shell) update(gtx layout.Context) {
 			s.expanded[key] = !s.expanded[key]
 		}
 	}
-	if s.activeMenu >= 0 {
+	if s.activeMenu >= 0 && s.activeMenu < len(s.menus) {
 		for index := range s.menus[s.activeMenu].items {
 			item := &s.menus[s.activeMenu].items[index]
 			if item.enabled && item.click.Clicked(gtx) {
@@ -298,14 +298,16 @@ func (s *shell) update(gtx layout.Context) {
 					s.activeSub = index
 				} else {
 					s.activateItem(*item)
+					return
 				}
 			}
 		}
-		if s.activeSub >= 0 {
+		if s.activeSub >= 0 && s.activeSub < len(s.menus[s.activeMenu].items) {
 			for index := range s.menus[s.activeMenu].items[s.activeSub].items {
 				item := &s.menus[s.activeMenu].items[s.activeSub].items[index]
 				if item.enabled && item.click.Clicked(gtx) {
 					s.activateItem(*item)
+					return
 				}
 			}
 		}
