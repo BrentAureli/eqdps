@@ -12,6 +12,7 @@ const maxRecentLogs = 8
 type guiSettings struct {
 	LastLogfile    string   `json:"last_logfile,omitempty"`
 	RecentLogfiles []string `json:"recent_logfiles,omitempty"`
+	OverlayVisible bool     `json:"overlay_visible,omitempty"`
 }
 
 func settingsPath() (string, error) {

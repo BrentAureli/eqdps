@@ -1,6 +1,24 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestOverlayVisibilityRoundTripsThroughSettingsJSON(t *testing.T) {
+	settings := guiSettings{OverlayVisible: true}
+	data, err := json.Marshal(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded guiSettings
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !decoded.OverlayVisible {
+		t.Fatal("expected overlay visibility to survive settings round trip")
+	}
+}
 
 func TestRememberLogMovesPathToFrontWithoutDuplicates(t *testing.T) {
 	settings := guiSettings{RecentLogfiles: []string{"/one", "/two", "/three"}}

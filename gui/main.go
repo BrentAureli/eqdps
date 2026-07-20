@@ -227,7 +227,7 @@ func newShell(window *app.Window) *shell {
 		menus: []menu{
 			{name: "File", items: []menuItem{{name: "Open logfile", detail: "Choose a file and initial history", enabled: true, items: ranges}, {name: "Recent logfiles", enabled: len(recents) > 0, items: recents}, {name: "Exit", enabled: true, action: "exit"}}},
 			{name: "Combat", items: []menuItem{{name: "Current fight", enabled: true}, {name: "Load history", enabled: currentLog != "", items: historyRangeItems("reload")}, {name: "Filter…", enabled: true}}},
-			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true}, {name: "Plane of Sky", enabled: true}, {name: "DPS overlay", detail: "Open compact current-fight window", enabled: true, action: "overlay"}}},
+			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true}, {name: "Plane of Sky", enabled: true}, {name: "Show DPS overlay", detail: "Toggle compact current-fight window", enabled: true, action: "overlay"}}},
 			{name: "Tools", items: []menuItem{{name: "Preferences…", enabled: true}}},
 			{name: "Help", items: []menuItem{{name: "About eqdps", enabled: true}}},
 		},
@@ -235,6 +235,10 @@ func newShell(window *app.Window) *shell {
 	}
 	if currentLog != "" {
 		result.loadLog(currentLog, 0)
+	}
+	if settings.OverlayVisible {
+		result.menus[2].items[2].name = "Hide DPS overlay"
+		result.openOverlay()
 	}
 	return result
 }
@@ -261,6 +265,7 @@ func (s *shell) update(gtx layout.Context) {
 	case closed := <-s.overlayClosed:
 		if s.overlay == closed {
 			s.overlay = nil
+			s.setOverlayVisible(false)
 		}
 	default:
 	}
@@ -415,7 +420,7 @@ func (s *shell) activateItem(item menuItem) {
 	case "reload":
 		s.loadLog(s.currentLog, item.back)
 	case "overlay":
-		s.openOverlay()
+		s.toggleOverlay()
 	case "exit":
 		s.window.Perform(system.ActionClose)
 	}

@@ -48,6 +48,28 @@ the full file with replay progress.
 
 **Status:** normal second-window live-data prototype available
 
+Gio exposes native topmost behavior on Windows and macOS. Wayland compositors
+control floating, stacking, opacity, and placement themselves. For Hyprland
+0.55 and newer, the overlay's stable title can be matched in
+`~/.config/hypr/hyprland.lua`:
+
+```lua
+hl.window_rule({
+    name = "eqdps-overlay",
+    match = { title = "^eqdps — Current Fight$" },
+    float = true,
+    pin = true,
+    no_initial_focus = true,
+    persistent_size = true,
+    move = {100, 100},
+    opacity = "0.75 override 0.75 override 0.75 override",
+})
+```
+
+The `move` coordinates are monitor-local and can be changed to the desired
+starting location. Hyprland persists the floating size, but not an arbitrary
+last dragged position; the rule therefore provides a stable chosen position.
+
 - Open a separate compact current-fight window.
 - Make it borderless, always on top, draggable, and resizable.
 - Apply adjustable whole-window opacity.

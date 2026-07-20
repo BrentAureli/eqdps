@@ -35,6 +35,7 @@ func (s *shell) openOverlay() {
 		app.Title("eqdps — Current Fight"),
 		app.Size(unit.Dp(520), unit.Dp(310)),
 		app.MinSize(unit.Dp(380), unit.Dp(180)),
+		app.TopMost(true),
 	)
 	// Gio text shapers maintain mutable caches and must not be shared by
 	// independently rendered top-level windows.
@@ -56,6 +57,28 @@ func (s *shell) openOverlay() {
 			log.Printf("DPS overlay: %v", err)
 		}
 	}()
+}
+
+func (s *shell) toggleOverlay() {
+	if s.overlay != nil {
+		s.overlay.window.Perform(system.ActionClose)
+		s.setOverlayVisible(false)
+		return
+	}
+	s.openOverlay()
+	s.setOverlayVisible(true)
+}
+
+func (s *shell) setOverlayVisible(visible bool) {
+	s.settings.OverlayVisible = visible
+	if visible {
+		s.menus[2].items[2].name = "Hide DPS overlay"
+	} else {
+		s.menus[2].items[2].name = "Show DPS overlay"
+	}
+	if err := saveSettings(s.settings); err != nil {
+		s.statusText = "Overlay preference could not be saved"
+	}
 }
 
 func (s *shell) pushOverlay(fights []fakeFightSection) {
