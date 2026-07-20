@@ -249,20 +249,24 @@ func (s *shell) layoutWorkspace(gtx layout.Context) layout.Dimensions {
 }
 
 func (s *shell) layoutDamageMeter(gtx layout.Context) layout.Dimensions {
-	return s.fightList.Layout(gtx, len(fakeFights), func(gtx layout.Context, index int) layout.Dimensions {
-		fight := fakeFights[index]
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutFightHeader(gtx, fight) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return s.layoutCombatRow(gtx, fakeCombatant{}, true, false)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return separator(gtx) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutCombatRows(gtx, fight.combatants) }),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(14)))}
-			}),
-		)
-	})
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return s.layoutCombatRow(gtx, fakeCombatant{}, true, false)
+		}),
+		layout.Rigid(separator),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return s.fightList.Layout(gtx, len(fakeFights), func(gtx layout.Context, index int) layout.Dimensions {
+				fight := fakeFights[index]
+				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutFightHeader(gtx, fight) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions { return s.layoutCombatRows(gtx, fight.combatants) }),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, gtx.Dp(unit.Dp(14)))}
+					}),
+				)
+			})
+		}),
+	)
 }
 
 func (s *shell) layoutFightHeader(gtx layout.Context, fight fakeFightSection) layout.Dimensions {
@@ -310,6 +314,9 @@ func (s *shell) layoutCombatRow(gtx layout.Context, row fakeCombatant, header, a
 	gtx.Constraints.Max.Y = gtx.Constraints.Min.Y
 	if alternate {
 		fill(gtx, palette.panel)
+	}
+	if header {
+		fill(gtx, palette.chrome)
 	}
 	if row.accent {
 		paint.FillShape(gtx.Ops, palette.accent, clip.Rect{Max: image.Pt(gtx.Dp(unit.Dp(3)), gtx.Constraints.Max.Y)}.Op())
