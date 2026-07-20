@@ -21,7 +21,7 @@ type guiSettings struct {
 
 func (settings *guiSettings) normalize() {
 	settings.MainFontScale = clampSetting(settings.MainFontScale, .75, 1.5, 1)
-	settings.DPSFontScale = clampSetting(settings.DPSFontScale, .75, 1.5, 1)
+	settings.DPSFontScale = clampSetting(settings.DPSFontScale, .5, 1.5, 1)
 	settings.DPSOpacity = clampSetting(settings.DPSOpacity, .35, 1, .8)
 }
 

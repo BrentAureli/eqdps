@@ -36,6 +36,14 @@ func TestSettingsNormalizationClampsPreferenceRanges(t *testing.T) {
 	}
 }
 
+func TestOverlayFontScaleAllowsFiftyPercent(t *testing.T) {
+	settings := guiSettings{DPSFontScale: .5}
+	settings.normalize()
+	if settings.DPSFontScale != .5 {
+		t.Fatalf("expected 50%% overlay scale, got %v", settings.DPSFontScale)
+	}
+}
+
 func TestRememberLogMovesPathToFrontWithoutDuplicates(t *testing.T) {
 	settings := guiSettings{RecentLogfiles: []string{"/one", "/two", "/three"}}
 	settings.rememberLog("/two")

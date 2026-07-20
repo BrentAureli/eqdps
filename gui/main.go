@@ -244,7 +244,7 @@ func newShell(window *app.Window) *shell {
 		rail: []railItem{{short: "DPS", name: "Combat Log"}, {short: "SKY", name: "Plane of Sky"}, {short: "SET", name: "Settings"}},
 	}
 	result.mainScale.Value = settingToSlider(settings.MainFontScale, .75, 1.5)
-	result.dpsScale.Value = settingToSlider(settings.DPSFontScale, .75, 1.5)
+	result.dpsScale.Value = settingToSlider(settings.DPSFontScale, .5, 1.5)
 	result.dpsOpacity.Value = settingToSlider(settings.DPSOpacity, .35, 1)
 	if currentLog != "" {
 		result.loadLog(currentLog, 0)

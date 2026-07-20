@@ -32,7 +32,7 @@ func (s *shell) layoutPreferences(gtx layout.Context) layout.Dimensions {
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return inset(0, unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return s.layoutPreferenceSlider(gtx, "DPS overlay font scale", &s.dpsScale, .75, 1.5, true)
+				return s.layoutPreferenceSlider(gtx, "DPS overlay font scale", &s.dpsScale, .5, 1.5, true)
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -81,7 +81,7 @@ func (s *shell) layoutPreferenceSlider(gtx layout.Context, title string, state *
 
 func (s *shell) applyPreferenceValues() {
 	mainScale := sliderToSetting(s.mainScale.Value, .75, 1.5)
-	dpsScale := sliderToSetting(s.dpsScale.Value, .75, 1.5)
+	dpsScale := sliderToSetting(s.dpsScale.Value, .5, 1.5)
 	opacity := sliderToSetting(s.dpsOpacity.Value, .35, 1)
 	if mainScale != s.settings.MainFontScale || dpsScale != s.settings.DPSFontScale || opacity != s.settings.DPSOpacity {
 		s.settings.MainFontScale = mainScale
