@@ -120,12 +120,12 @@ func (s *shell) skyQuestRows(progress skyquest.QuestProgress, readySummary bool)
 	rows := []skyRow{{kind: "quest", name: name, status: status, detail: progress.Quest.QuestGiver + " — Reward: " + strings.Join(progress.Quest.Rewards, " / "), foreground: foreground}}
 	for _, requirement := range progress.Quest.Requirements {
 		owned := s.skyInventory[requirement.Name]
-		mark, requirementColor := "✗", skyMissingColor
+		mark, requirementColor := "–", skyMissingColor
 		have, need := fmt.Sprint(owned), fmt.Sprint(requirement.Quantity)
 		if progress.Completed {
-			mark, requirementColor, have, need = "✓", skyDoneColor, "—", "—"
+			mark, requirementColor, have, need = "+", skyDoneColor, "—", "—"
 		} else if owned >= requirement.Quantity {
-			mark, requirementColor = "✓", skyReadyColor
+			mark, requirementColor = "+", skyReadyColor
 		}
 		rows = append(rows, skyRow{kind: "requirement", name: mark + " " + requirement.Name, have: have, need: need, detail: skyRequirementSource(requirement), foreground: requirementColor})
 	}
@@ -216,11 +216,21 @@ func (s *shell) layoutSkyRow(gtx layout.Context, row skyRow, header bool) layout
 		return inset(unit.Dp(10), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			cell := func(value string, weight float32, alignment text.Alignment) layout.FlexChild {
 				return layout.Flexed(weight, func(gtx layout.Context) layout.Dimensions {
-					return label(gtx, s.theme, value, unit.Sp(14), foreground, alignment)
+					return inset(unit.Dp(5), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						style := material.Label(s.theme, unit.Sp(14)*s.theme.TextSize/16, value)
+						style.Color = foreground
+						style.Alignment = alignment
+						style.MaxLines = 1
+						style.Truncator = "…"
+						if header || row.kind == "section" || row.kind == "class" {
+							style.Font.Weight = font.SemiBold
+						}
+						return style.Layout(gtx)
+					})
 				})
 			}
 			return layout.Flex{Axis: layout.Horizontal, Alignment: layout.Middle}.Layout(gtx,
-				cell(values[0], 3.1, text.Start), cell(values[1], 1.25, text.End), cell(values[2], .65, text.End), cell(values[3], .65, text.End), cell(values[4], 3.4, text.Start),
+				cell(values[0], 3.1, text.Start), cell(values[1], 1.25, text.End), cell(values[2], .8, text.End), cell(values[3], .8, text.End), cell(values[4], 3.4, text.Start),
 			)
 		})
 	})
