@@ -45,66 +45,67 @@ var palette = struct {
 }
 
 type shell struct {
-	theme         *material.Theme
-	fightList     widget.List
-	workspace     int
-	activeMenu    int
-	activeSub     int
-	treeClicks    map[string]*widget.Clickable
-	expanded      map[string]bool
-	window        *app.Window
-	settings      guiSettings
-	currentLog    string
-	statusText    string
-	fileChosen    chan fileChoice
-	combatUpdates chan combatUpdate
-	logCancel     chan struct{}
-	loading       bool
-	loadBytes     int64
-	loadTotal     int64
-	loadLines     int
-	loadingTitle  string
-	overlay       *combatOverlay
-	overlayClosed chan *combatOverlay
-	waylandHelp   bool
-	openAfterHelp bool
-	rememberHelp  bool
-	helpClose     widget.Clickable
-	mainScale     widget.Float
-	dpsScale      widget.Float
-	dpsOpacity    widget.Float
-	prefsDirty    bool
-	xpSnapshot    xp.Snapshot
-	parserState   string
-	allFights     []fakeFightSection
-	fightFilter   string
-	filterEditor  widget.Editor
-	filterClear   widget.Clickable
-	skyDatabase   skyquest.Database
-	skyProgress   []skyquest.QuestProgress
-	skyInventory  map[string]int
-	skyRows       []skyRow
-	skyIdentity   string
-	skyMessage    string
-	skyHideEmpty  bool
-	skyHideClick  widget.Clickable
-	skyList       widget.List
-	skyTracker    *skyquest.PersistentTracker
-	skyMu         sync.RWMutex
-	skyUpdates    chan skyAsyncUpdate
-	skyCancel     chan struct{}
-	skySetupOpen  bool
-	skyDenied     bool
-	skyAllow      widget.Clickable
-	skyDeny       widget.Clickable
-	skyLoading    bool
-	skyLoadBytes  int64
-	skyLoadTotal  int64
-	skyLoadLines  int
-	skyLoadTitle  string
-	fights        []fakeFightSection
-	menus         []menu
-	rail          []railItem
+	theme          *material.Theme
+	fightList      widget.List
+	workspace      int
+	activeMenu     int
+	activeSub      int
+	treeClicks     map[string]*widget.Clickable
+	expanded       map[string]bool
+	window         *app.Window
+	settings       guiSettings
+	currentLog     string
+	statusText     string
+	fileChosen     chan fileChoice
+	combatUpdates  chan combatUpdate
+	logCancel      chan struct{}
+	loading        bool
+	loadBytes      int64
+	loadTotal      int64
+	loadLines      int
+	loadingTitle   string
+	overlay        *combatOverlay
+	overlayClosed  chan *combatOverlay
+	waylandHelp    bool
+	openAfterHelp  bool
+	rememberHelp   bool
+	helpClose      widget.Clickable
+	mainScale      widget.Float
+	dpsScale       widget.Float
+	dpsOpacity     widget.Float
+	prefsDirty     bool
+	xpSnapshot     xp.Snapshot
+	parserState    string
+	allFights      []fakeFightSection
+	fightFilter    string
+	filterEditor   widget.Editor
+	filterClear    widget.Clickable
+	skyDatabase    skyquest.Database
+	skyProgress    []skyquest.QuestProgress
+	skyInventory   map[string]int
+	skyRows        []skyRow
+	skyIdentity    string
+	skyMessage     string
+	skyHideEmpty   bool
+	skyHideClick   widget.Clickable
+	skyStatusClick widget.Clickable
+	skyList        widget.List
+	skyTracker     *skyquest.PersistentTracker
+	skyMu          sync.RWMutex
+	skyUpdates     chan skyAsyncUpdate
+	skyCancel      chan struct{}
+	skySetupOpen   bool
+	skyDenied      bool
+	skyAllow       widget.Clickable
+	skyDeny        widget.Clickable
+	skyLoading     bool
+	skyLoadBytes   int64
+	skyLoadTotal   int64
+	skyLoadLines   int
+	skyLoadTitle   string
+	fights         []fakeFightSection
+	menus          []menu
+	rail           []railItem
 }
 
 type menu struct {
@@ -409,6 +410,10 @@ func (s *shell) update(gtx layout.Context) {
 		s.skyHideEmpty = !s.skyHideEmpty
 		s.rebuildSkyRows()
 		s.skyList.ScrollTo(0)
+	}
+	if s.skyStatusClick.Clicked(gtx) {
+		s.workspace = 1
+		s.activeMenu = -1
 	}
 	for index := range s.menus {
 		if s.menus[index].click.Clicked(gtx) {
@@ -876,8 +881,11 @@ func (s *shell) layoutStatus(gtx layout.Context) layout.Dimensions {
 					if ready > 0 {
 						foreground = skyReadyColor
 					}
-					return inset(unit.Dp(18), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return label(gtx, s.theme, fmt.Sprintf("PoS: %d ready", ready), unit.Sp(15), foreground, text.Start)
+					return s.skyStatusClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						pointer.CursorPointer.Add(gtx.Ops)
+						return inset(unit.Dp(18), 0).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return label(gtx, s.theme, fmt.Sprintf("PoS: %d ready", ready), unit.Sp(15), foreground, text.Start)
+						})
 					})
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
