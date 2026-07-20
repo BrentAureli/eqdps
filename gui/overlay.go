@@ -67,23 +67,35 @@ func (s *shell) toggleOverlay() {
 		s.setOverlayVisible(false)
 		return
 	}
+	if s.showWaylandHelpOnce() {
+		s.openAfterHelp = true
+		return
+	}
 	s.openOverlay()
 	s.setOverlayVisible(true)
-	s.showWaylandHelpOnce()
 }
 
 func isWaylandSession() bool {
 	return strings.EqualFold(os.Getenv("XDG_SESSION_TYPE"), "wayland") || os.Getenv("WAYLAND_DISPLAY") != ""
 }
 
-func (s *shell) showWaylandHelpOnce() {
+func (s *shell) showWaylandHelpOnce() bool {
 	if !isWaylandSession() || s.settings.WaylandNotice {
-		return
+		return false
 	}
 	s.settings.WaylandNotice = true
 	s.waylandHelp = true
 	if err := saveSettings(s.settings); err != nil {
 		s.statusText = "Wayland help preference could not be saved"
+	}
+	return true
+}
+
+func (s *shell) showWaylandHelp() {
+	s.waylandHelp = true
+	if s.overlay != nil {
+		s.openAfterHelp = true
+		s.overlay.window.Perform(system.ActionClose)
 	}
 }
 

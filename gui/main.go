@@ -63,6 +63,7 @@ type shell struct {
 	overlay       *combatOverlay
 	overlayClosed chan *combatOverlay
 	waylandHelp   bool
+	openAfterHelp bool
 	helpClose     widget.Clickable
 	fights        []fakeFightSection
 	menus         []menu
@@ -240,8 +241,11 @@ func newShell(window *app.Window) *shell {
 	}
 	if settings.OverlayVisible {
 		result.menus[2].items[2].name = "Hide DPS overlay"
-		result.openOverlay()
-		result.showWaylandHelpOnce()
+		if result.showWaylandHelpOnce() {
+			result.openAfterHelp = true
+		} else {
+			result.openOverlay()
+		}
 	}
 	return result
 }
@@ -267,6 +271,11 @@ func (s *shell) layout(gtx layout.Context) layout.Dimensions {
 func (s *shell) update(gtx layout.Context) {
 	if s.helpClose.Clicked(gtx) {
 		s.waylandHelp = false
+		if s.openAfterHelp {
+			s.openAfterHelp = false
+			s.openOverlay()
+			s.setOverlayVisible(true)
+		}
 	}
 	select {
 	case closed := <-s.overlayClosed:
@@ -429,7 +438,7 @@ func (s *shell) activateItem(item menuItem) {
 	case "overlay":
 		s.toggleOverlay()
 	case "wayland-help":
-		s.waylandHelp = true
+		s.showWaylandHelp()
 	case "exit":
 		s.window.Perform(system.ActionClose)
 	}
