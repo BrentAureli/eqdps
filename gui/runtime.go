@@ -84,6 +84,9 @@ func (s *shell) loadLog(path string, back time.Duration) {
 }
 
 func (s *shell) sendCombatUpdate(update combatUpdate) {
+	if update.fights != nil {
+		s.pushOverlay(update.fights)
+	}
 	select {
 	case s.combatUpdates <- update:
 	default:

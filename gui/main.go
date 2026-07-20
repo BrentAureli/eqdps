@@ -69,6 +69,7 @@ type shell struct {
 	loadingTitle      string
 	operationCancel   widget.Clickable
 	overlay           *combatOverlay
+	overlayMu         sync.RWMutex
 	overlayClosed     chan *combatOverlay
 	waylandHelp       bool
 	openAfterHelp     bool
@@ -81,6 +82,7 @@ type shell struct {
 	dpsOpacity        widget.Float
 	idleTimeoutSlider widget.Float
 	combatIdleNanos   atomic.Int64
+	dpsFontMilli      atomic.Int64
 	prefsDirty        bool
 	xpSnapshot        xp.Snapshot
 	parserState       string
@@ -271,6 +273,7 @@ func newShell(window *app.Window) *shell {
 	result.dpsOpacity.Value = settingToSlider(settings.DPSOpacity, .35, 1)
 	result.idleTimeoutSlider.Value = settingToSlider(float32(settings.IdleTimeoutSec), 5, 60)
 	result.combatIdleNanos.Store(int64(time.Duration(settings.IdleTimeoutSec) * time.Second))
+	result.dpsFontMilli.Store(int64(settings.DPSFontScale*1000 + .5))
 	if skyDatabaseErr != nil {
 		result.skyMessage = skyDatabaseErr.Error()
 	} else {
@@ -343,6 +346,7 @@ func (s *shell) update(gtx layout.Context) {
 	}
 	select {
 	case closed := <-s.overlayClosed:
+		s.overlayMu.Lock()
 		if s.overlay == closed {
 			if closed.lastWidth >= 380 && closed.lastHeight >= 180 {
 				s.settings.OverlayWidth = closed.lastWidth
@@ -351,6 +355,7 @@ func (s *shell) update(gtx layout.Context) {
 			s.overlay = nil
 			s.setOverlayVisible(false)
 		}
+		s.overlayMu.Unlock()
 	default:
 	}
 	select {
@@ -378,7 +383,6 @@ func (s *shell) update(gtx layout.Context) {
 		if update.fights != nil {
 			s.allFights = update.fights
 			s.applyFightFilter()
-			s.pushOverlay(update.fights)
 		}
 		if update.xp != nil {
 			s.xpSnapshot = *update.xp

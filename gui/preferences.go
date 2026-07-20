@@ -97,6 +97,7 @@ func (s *shell) applyPreferenceValues() {
 	if mainScale != s.settings.MainFontScale || dpsScale != s.settings.DPSFontScale || opacity != s.settings.DPSOpacity || idleTimeout != s.settings.IdleTimeoutSec {
 		s.settings.MainFontScale = mainScale
 		s.settings.DPSFontScale = dpsScale
+		s.dpsFontMilli.Store(int64(dpsScale*1000 + .5))
 		s.settings.DPSOpacity = opacity
 		s.settings.IdleTimeoutSec = idleTimeout
 		s.combatIdleNanos.Store(int64(time.Duration(idleTimeout) * time.Second))

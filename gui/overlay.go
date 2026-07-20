@@ -49,8 +49,11 @@ type overlayUpdate struct {
 }
 
 func (s *shell) openOverlay() {
+	s.overlayMu.Lock()
 	if s.overlay != nil {
-		s.overlay.window.Perform(system.ActionRaise)
+		window := s.overlay.window
+		s.overlayMu.Unlock()
+		window.Perform(system.ActionRaise)
 		return
 	}
 	window := new(app.Window)
@@ -75,6 +78,7 @@ func (s *shell) openOverlay() {
 		list:    widget.List{List: layout.List{Axis: layout.Vertical}},
 	}
 	s.overlay = overlay
+	s.overlayMu.Unlock()
 	s.pushOverlay(s.fights)
 	go func() {
 		if err := overlay.run(); err != nil {
@@ -84,8 +88,11 @@ func (s *shell) openOverlay() {
 }
 
 func (s *shell) toggleOverlay() {
-	if s.overlay != nil {
-		s.overlay.window.Perform(system.ActionClose)
+	s.overlayMu.RLock()
+	overlay := s.overlay
+	s.overlayMu.RUnlock()
+	if overlay != nil {
+		overlay.window.Perform(system.ActionClose)
 		s.setOverlayVisible(false)
 		return
 	}
@@ -127,19 +134,25 @@ func (s *shell) setOverlayVisible(visible bool) {
 }
 
 func (s *shell) pushOverlay(fights []fakeFightSection) {
-	if s.overlay == nil {
+	s.overlayMu.RLock()
+	defer s.overlayMu.RUnlock()
+	overlay := s.overlay
+	if overlay == nil {
 		return
 	}
+	fontScale := float32(s.dpsFontMilli.Load()) / 1000
 	select {
-	case s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale, idleTimeout: time.Duration(s.combatIdleNanos.Load())}:
+	case overlay.updates <- overlayUpdate{fights: fights, fontScale: fontScale, idleTimeout: time.Duration(s.combatIdleNanos.Load())}:
 	default:
 		select {
-		case <-s.overlay.updates:
+		case <-overlay.updates:
 		default:
 		}
-		s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale, idleTimeout: time.Duration(s.combatIdleNanos.Load())}
+		overlay.updates <- overlayUpdate{fights: fights, fontScale: fontScale, idleTimeout: time.Duration(s.combatIdleNanos.Load())}
 	}
-	s.overlay.window.Invalidate()
+	if overlay.window != nil {
+		overlay.window.Invalidate()
+	}
 }
 
 func (o *combatOverlay) run() error {

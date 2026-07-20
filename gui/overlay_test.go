@@ -100,6 +100,23 @@ func TestOverlayStabilizesRapidTargetChanges(t *testing.T) {
 	}
 }
 
+func TestPushOverlayDoesNotDependOnMainWindowFrame(t *testing.T) {
+	overlay := &combatOverlay{updates: make(chan overlayUpdate, 1)}
+	shell := shell{overlay: overlay}
+	shell.dpsFontMilli.Store(750)
+	shell.combatIdleNanos.Store(int64(15 * time.Second))
+	shell.pushOverlay([]fakeFightSection{{name: "live fight"}})
+
+	select {
+	case update := <-overlay.updates:
+		if len(update.fights) != 1 || update.fights[0].name != "live fight" || update.fontScale != .75 || update.idleTimeout != 15*time.Second {
+			t.Fatalf("unexpected direct overlay update: %#v", update)
+		}
+	default:
+		t.Fatal("overlay update waited for the main window")
+	}
+}
+
 func TestWaylandSessionDetection(t *testing.T) {
 	t.Setenv("XDG_SESSION_TYPE", "wayland")
 	t.Setenv("WAYLAND_DISPLAY", "")
