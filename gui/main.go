@@ -465,7 +465,7 @@ func (s *shell) layoutLoadingOverlay(gtx layout.Context) layout.Dimensions {
 	}
 	paint.Fill(gtx.Ops, color.NRGBA{A: 165})
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(480)), gtx.Dp(unit.Dp(150)))
+		gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(620)), gtx.Dp(unit.Dp(210)))
 		gtx.Constraints.Max = gtx.Constraints.Min
 		return outline(gtx, palette.line, func(gtx layout.Context) layout.Dimensions {
 			fill(gtx, palette.panel)
