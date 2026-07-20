@@ -64,6 +64,7 @@ type shell struct {
 	overlayClosed chan *combatOverlay
 	waylandHelp   bool
 	openAfterHelp bool
+	rememberHelp  bool
 	helpClose     widget.Clickable
 	fights        []fakeFightSection
 	menus         []menu
@@ -271,6 +272,13 @@ func (s *shell) layout(gtx layout.Context) layout.Dimensions {
 func (s *shell) update(gtx layout.Context) {
 	if s.helpClose.Clicked(gtx) {
 		s.waylandHelp = false
+		if s.rememberHelp {
+			s.rememberHelp = false
+			s.settings.WaylandNotice = true
+			if err := saveSettings(s.settings); err != nil {
+				s.statusText = "Wayland help preference could not be saved"
+			}
+		}
 		if s.openAfterHelp {
 			s.openAfterHelp = false
 			s.openOverlay()

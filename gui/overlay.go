@@ -83,11 +83,8 @@ func (s *shell) showWaylandHelpOnce() bool {
 	if !isWaylandSession() || s.settings.WaylandNotice {
 		return false
 	}
-	s.settings.WaylandNotice = true
 	s.waylandHelp = true
-	if err := saveSettings(s.settings); err != nil {
-		s.statusText = "Wayland help preference could not be saved"
-	}
+	s.rememberHelp = true
 	return true
 }
 
