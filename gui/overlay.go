@@ -36,9 +36,14 @@ func (s *shell) openOverlay() {
 		app.Size(unit.Dp(520), unit.Dp(310)),
 		app.MinSize(unit.Dp(380), unit.Dp(180)),
 	)
+	// Gio text shapers maintain mutable caches and must not be shared by
+	// independently rendered top-level windows.
+	theme := material.NewTheme()
+	theme.Palette.Fg = palette.text
+	theme.Palette.Bg = palette.window
 	overlay := &combatOverlay{
 		window:  window,
-		theme:   s.theme,
+		theme:   theme,
 		updates: make(chan []fakeFightSection, 1),
 		closed:  s.overlayClosed,
 		owner:   s.window,
