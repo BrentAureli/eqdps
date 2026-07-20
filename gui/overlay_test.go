@@ -16,6 +16,21 @@ func TestOverlayDisplaysLatestCompletedFightBetweenFights(t *testing.T) {
 	}
 }
 
+func TestOverlayExpiresCompletedFightAfterIdleTimeout(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	overlay := combatOverlay{
+		fights:      []fakeFightSection{{name: "completed"}},
+		idleTimeout: 15 * time.Second,
+		completedAt: now,
+	}
+	if got := overlay.displayFightAt(now.Add(14 * time.Second)); got == nil {
+		t.Fatal("completed fight expired too early")
+	}
+	if got := overlay.displayFightAt(now.Add(15 * time.Second)); got != nil {
+		t.Fatalf("completed fight remained after timeout: %#v", got)
+	}
+}
+
 func TestOverlayPrefersNewestOfConcurrentCurrentFights(t *testing.T) {
 	started := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	overlay := combatOverlay{fights: []fakeFightSection{

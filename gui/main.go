@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gioui.org/app"
@@ -45,72 +46,83 @@ var palette = struct {
 }
 
 type shell struct {
-	theme           *material.Theme
-	fightList       widget.List
-	workspace       int
-	activeMenu      int
-	activeSub       int
-	treeClicks      map[string]*widget.Clickable
-	expanded        map[string]bool
-	window          *app.Window
-	settings        guiSettings
-	currentLog      string
-	statusText      string
-	fileChosen      chan fileChoice
-	combatUpdates   chan combatUpdate
-	logCancel       chan struct{}
-	loading         bool
-	loadBytes       int64
-	loadTotal       int64
-	loadLines       int
-	loadingTitle    string
-	operationCancel widget.Clickable
-	overlay         *combatOverlay
-	overlayClosed   chan *combatOverlay
-	waylandHelp     bool
-	openAfterHelp   bool
-	rememberHelp    bool
-	helpClose       widget.Clickable
-	aboutOpen       bool
-	aboutClose      widget.Clickable
-	mainScale       widget.Float
-	dpsScale        widget.Float
-	dpsOpacity      widget.Float
-	prefsDirty      bool
-	xpSnapshot      xp.Snapshot
-	parserState     string
-	allFights       []fakeFightSection
-	fightFilter     string
-	filterEditor    widget.Editor
-	filterClear     widget.Clickable
-	skyDatabase     skyquest.Database
-	skyProgress     []skyquest.QuestProgress
-	skyInventory    map[string]int
-	skyRows         []skyRow
-	skyIdentity     string
-	skyMessage      string
-	skyHideEmpty    bool
-	skyHideClick    widget.Clickable
-	skyStatusClick  widget.Clickable
-	skyNoticeText   string
-	skyNoticeUntil  time.Time
-	skyList         widget.List
-	skyTracker      *skyquest.PersistentTracker
-	skyMu           sync.RWMutex
-	skyUpdates      chan skyAsyncUpdate
-	skyCancel       chan struct{}
-	skySetupOpen    bool
-	skyDenied       bool
-	skyAllow        widget.Clickable
-	skyDeny         widget.Clickable
-	skyLoading      bool
-	skyLoadBytes    int64
-	skyLoadTotal    int64
-	skyLoadLines    int
-	skyLoadTitle    string
-	fights          []fakeFightSection
-	menus           []menu
-	rail            []railItem
+	theme             *material.Theme
+	fightList         widget.List
+	workspace         int
+	activeMenu        int
+	activeSub         int
+	treeClicks        map[string]*widget.Clickable
+	expanded          map[string]bool
+	window            *app.Window
+	settings          guiSettings
+	currentLog        string
+	statusText        string
+	lastMainWidth     int
+	lastMainHeight    int
+	fileChosen        chan fileChoice
+	combatUpdates     chan combatUpdate
+	logCancel         chan struct{}
+	loading           bool
+	loadBytes         int64
+	loadTotal         int64
+	loadLines         int
+	loadingTitle      string
+	operationCancel   widget.Clickable
+	overlay           *combatOverlay
+	overlayClosed     chan *combatOverlay
+	waylandHelp       bool
+	openAfterHelp     bool
+	rememberHelp      bool
+	helpClose         widget.Clickable
+	aboutOpen         bool
+	aboutClose        widget.Clickable
+	mainScale         widget.Float
+	dpsScale          widget.Float
+	dpsOpacity        widget.Float
+	idleTimeoutSlider widget.Float
+	combatIdleNanos   atomic.Int64
+	prefsDirty        bool
+	xpSnapshot        xp.Snapshot
+	parserState       string
+	allFights         []fakeFightSection
+	fightFilter       string
+	filterEditor      widget.Editor
+	filterClear       widget.Clickable
+	skyDatabase       skyquest.Database
+	skyProgress       []skyquest.QuestProgress
+	skyInventory      map[string]int
+	skyRows           []skyRow
+	skyIdentity       string
+	skyMessage        string
+	skyHideEmpty      bool
+	skyHideClick      widget.Clickable
+	skyStatusClick    widget.Clickable
+	skyNoticeText     string
+	skyNoticeUntil    time.Time
+	skyList           widget.List
+	skyTracker        *skyquest.PersistentTracker
+	skyMu             sync.RWMutex
+	skyUpdates        chan skyAsyncUpdate
+	skyCancel         chan struct{}
+	skySetupOpen      bool
+	skyDenied         bool
+	skyAllow          widget.Clickable
+	skyDeny           widget.Clickable
+	skyLoading        bool
+	skyLoadBytes      int64
+	skyLoadTotal      int64
+	skyLoadLines      int
+	skyLoadTitle      string
+	fights            []fakeFightSection
+	menus             []menu
+	rail              []railItem
+}
+
+func (s *shell) captureMainSize(width, height int) {
+	if width >= 720 && height >= 460 {
+		s.settings.MainWidth = width
+		s.settings.MainHeight = height
+	}
 }
 
 type menu struct {
@@ -169,10 +181,12 @@ type fakeFightSection struct {
 
 func main() {
 	go func() {
+		settings, _ := loadSettings()
+		settings.normalize()
 		window := new(app.Window)
 		window.Option(
 			app.Title("eqdps"),
-			app.Size(unit.Dp(1050), unit.Dp(700)),
+			app.Size(unit.Dp(settings.MainWidth), unit.Dp(settings.MainHeight)),
 			app.MinSize(unit.Dp(720), unit.Dp(460)),
 		)
 		if err := run(window); err != nil {
@@ -189,9 +203,13 @@ func run(window *app.Window) error {
 	for {
 		switch event := window.Event().(type) {
 		case app.DestroyEvent:
+			ui.captureMainSize(ui.lastMainWidth, ui.lastMainHeight)
+			_ = saveSettings(ui.settings)
 			return event.Err
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, event)
+			ui.lastMainWidth = int(gtx.Metric.PxToDp(gtx.Constraints.Max.X))
+			ui.lastMainHeight = int(gtx.Metric.PxToDp(gtx.Constraints.Max.Y))
 			ui.layout(gtx)
 			event.Frame(gtx.Ops)
 		}
@@ -251,6 +269,8 @@ func newShell(window *app.Window) *shell {
 	result.mainScale.Value = settingToSlider(settings.MainFontScale, .75, 1.5)
 	result.dpsScale.Value = settingToSlider(settings.DPSFontScale, .5, 1.5)
 	result.dpsOpacity.Value = settingToSlider(settings.DPSOpacity, .35, 1)
+	result.idleTimeoutSlider.Value = settingToSlider(float32(settings.IdleTimeoutSec), 5, 60)
+	result.combatIdleNanos.Store(int64(time.Duration(settings.IdleTimeoutSec) * time.Second))
 	if skyDatabaseErr != nil {
 		result.skyMessage = skyDatabaseErr.Error()
 	} else {
@@ -324,6 +344,10 @@ func (s *shell) update(gtx layout.Context) {
 	select {
 	case closed := <-s.overlayClosed:
 		if s.overlay == closed {
+			if closed.lastWidth >= 380 && closed.lastHeight >= 180 {
+				s.settings.OverlayWidth = closed.lastWidth
+				s.settings.OverlayHeight = closed.lastHeight
+			}
 			s.overlay = nil
 			s.setOverlayVisible(false)
 		}

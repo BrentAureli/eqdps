@@ -165,6 +165,13 @@ func ProcessRecord(record eqlog.Record, tracker *combat.FightTracker, xpSession 
 }
 
 func Follow(logPath string, startOffset int64, done <-chan struct{}, onLine func(string, int64)) error {
+	return FollowWithPoll(logPath, startOffset, done, onLine, nil)
+}
+
+// FollowWithPoll follows complete lines and invokes onPoll while waiting at
+// EOF. The callbacks run serially, allowing a caller to maintain mutable parser
+// state without a second synchronization path.
+func FollowWithPoll(logPath string, startOffset int64, done <-chan struct{}, onLine func(string, int64), onPoll func(time.Time)) error {
 	file, err := os.Open(logPath)
 	if err != nil {
 		return fmt.Errorf("open log: %w", err)
@@ -196,6 +203,9 @@ func Follow(logPath string, startOffset int64, done <-chan struct{}, onLine func
 					return fmt.Errorf("rewind partial log line: %w", seekErr)
 				}
 				reader.Reset(file)
+			}
+			if onPoll != nil {
+				onPoll(time.Now())
 			}
 			time.Sleep(250 * time.Millisecond)
 			continue

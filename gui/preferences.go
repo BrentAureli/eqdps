@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"time"
 
 	"gioui.org/font"
 	"gioui.org/layout"
@@ -27,17 +28,22 @@ func (s *shell) layoutPreferences(gtx layout.Context) layout.Dimensions {
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return inset(0, unit.Dp(22)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return s.layoutPreferenceSlider(gtx, "Main window font scale", &s.mainScale, .75, 1.5, true)
+				return s.layoutPreferenceSlider(gtx, "Main window font scale", &s.mainScale, .75, 1.5, true, true)
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return inset(0, unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return s.layoutPreferenceSlider(gtx, "DPS overlay font scale", &s.dpsScale, .5, 1.5, true)
+				return s.layoutPreferenceSlider(gtx, "DPS overlay font scale", &s.dpsScale, .5, 1.5, true, true)
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return inset(0, unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return s.layoutPreferenceSlider(gtx, "DPS overlay opacity", &s.dpsOpacity, .35, 1, nativeOpacityAvailable())
+				return s.layoutPreferenceSlider(gtx, "DPS overlay opacity", &s.dpsOpacity, .35, 1, nativeOpacityAvailable(), true)
+			})
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return inset(0, unit.Dp(10)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return s.layoutPreferenceSlider(gtx, "Combat and overlay idle timeout", &s.idleTimeoutSlider, 5, 60, true, false)
 			})
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -52,8 +58,12 @@ func (s *shell) layoutPreferences(gtx layout.Context) layout.Dimensions {
 	)
 }
 
-func (s *shell) layoutPreferenceSlider(gtx layout.Context, title string, state *widget.Float, minimum, maximum float32, enabled bool) layout.Dimensions {
+func (s *shell) layoutPreferenceSlider(gtx layout.Context, title string, state *widget.Float, minimum, maximum float32, enabled, percentage bool) layout.Dimensions {
 	value := sliderToSetting(state.Value, minimum, maximum)
+	displayValue := fmt.Sprintf("%d seconds", int(value+.5))
+	if percentage {
+		displayValue = fmt.Sprintf("%d%%", int(value*100+.5))
+	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
@@ -61,7 +71,7 @@ func (s *shell) layoutPreferenceSlider(gtx layout.Context, title string, state *
 					return label(gtx, s.theme, title, unit.Sp(17), palette.text, text.Start)
 				}),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return labelWeight(gtx, s.theme, fmt.Sprintf("%d%%", int(value*100+.5)), unit.Sp(16), palette.accent, text.End, font.SemiBold)
+					return labelWeight(gtx, s.theme, displayValue, unit.Sp(16), palette.accent, text.End, font.SemiBold)
 				}),
 			)
 		}),
@@ -83,10 +93,13 @@ func (s *shell) applyPreferenceValues() {
 	mainScale := sliderToSetting(s.mainScale.Value, .75, 1.5)
 	dpsScale := sliderToSetting(s.dpsScale.Value, .5, 1.5)
 	opacity := sliderToSetting(s.dpsOpacity.Value, .35, 1)
-	if mainScale != s.settings.MainFontScale || dpsScale != s.settings.DPSFontScale || opacity != s.settings.DPSOpacity {
+	idleTimeout := int(sliderToSetting(s.idleTimeoutSlider.Value, 5, 60) + .5)
+	if mainScale != s.settings.MainFontScale || dpsScale != s.settings.DPSFontScale || opacity != s.settings.DPSOpacity || idleTimeout != s.settings.IdleTimeoutSec {
 		s.settings.MainFontScale = mainScale
 		s.settings.DPSFontScale = dpsScale
 		s.settings.DPSOpacity = opacity
+		s.settings.IdleTimeoutSec = idleTimeout
+		s.combatIdleNanos.Store(int64(time.Duration(idleTimeout) * time.Second))
 		s.theme.TextSize = unit.Sp(16 * mainScale)
 		s.pushOverlay(s.fights)
 		s.prefsDirty = true

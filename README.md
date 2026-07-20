@@ -70,6 +70,10 @@ Combat history replays and large Plane of Sky catch-ups show cancellable
 progress. **Combat → Reset session** clears the current combat and XP session
 and resumes at the end of the selected logfile. A newly completed Plane of Sky
 item set is announced in the clickable status segment without blocking combat.
+The GUI defaults to a 15-second combat idle timeout. The same timeout controls
+how long a completed fight remains in the DPS overlay and can be changed under
+**Tools → Preferences**. The main-window and overlay sizes are restored on the
+next launch; screen placement remains controlled by the window manager.
 
 #### DPS overlay on Wayland
 

@@ -17,12 +17,32 @@ type guiSettings struct {
 	MainFontScale  float32  `json:"main_font_scale,omitempty"`
 	DPSFontScale   float32  `json:"dps_font_scale,omitempty"`
 	DPSOpacity     float32  `json:"dps_opacity,omitempty"`
+	IdleTimeoutSec int      `json:"idle_timeout_seconds,omitempty"`
+	MainWidth      int      `json:"main_width,omitempty"`
+	MainHeight     int      `json:"main_height,omitempty"`
+	OverlayWidth   int      `json:"overlay_width,omitempty"`
+	OverlayHeight  int      `json:"overlay_height,omitempty"`
 }
 
 func (settings *guiSettings) normalize() {
 	settings.MainFontScale = clampSetting(settings.MainFontScale, .75, 1.5, 1)
 	settings.DPSFontScale = clampSetting(settings.DPSFontScale, .5, 1.5, 1)
 	settings.DPSOpacity = clampSetting(settings.DPSOpacity, .35, 1, .8)
+	if settings.IdleTimeoutSec == 0 {
+		settings.IdleTimeoutSec = 15
+	}
+	settings.IdleTimeoutSec = min(max(settings.IdleTimeoutSec, 5), 60)
+	settings.MainWidth = normalizedWindowSize(settings.MainWidth, 1050, 720)
+	settings.MainHeight = normalizedWindowSize(settings.MainHeight, 700, 460)
+	settings.OverlayWidth = normalizedWindowSize(settings.OverlayWidth, 520, 380)
+	settings.OverlayHeight = normalizedWindowSize(settings.OverlayHeight, 310, 180)
+}
+
+func normalizedWindowSize(value, fallback, minimum int) int {
+	if value < minimum {
+		return fallback
+	}
+	return value
 }
 
 func clampSetting(value, minimum, maximum, fallback float32) float32 {

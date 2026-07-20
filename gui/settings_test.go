@@ -23,8 +23,22 @@ func TestOverlayVisibilityRoundTripsThroughSettingsJSON(t *testing.T) {
 func TestSettingsNormalizationAddsPreferenceDefaults(t *testing.T) {
 	settings := guiSettings{}
 	settings.normalize()
-	if settings.MainFontScale != 1 || settings.DPSFontScale != 1 || settings.DPSOpacity != .8 {
+	if settings.MainFontScale != 1 || settings.DPSFontScale != 1 || settings.DPSOpacity != .8 || settings.IdleTimeoutSec != 15 {
 		t.Fatalf("unexpected preference defaults: %#v", settings)
+	}
+	if settings.MainWidth != 1050 || settings.MainHeight != 700 || settings.OverlayWidth != 520 || settings.OverlayHeight != 310 {
+		t.Fatalf("unexpected window size defaults: %#v", settings)
+	}
+}
+
+func TestSettingsNormalizationClampsIdleTimeoutAndPreservesWindowSizes(t *testing.T) {
+	settings := guiSettings{IdleTimeoutSec: 100, MainWidth: 1200, MainHeight: 800, OverlayWidth: 600, OverlayHeight: 400}
+	settings.normalize()
+	if settings.IdleTimeoutSec != 60 {
+		t.Fatalf("expected timeout clamp, got %d", settings.IdleTimeoutSec)
+	}
+	if settings.MainWidth != 1200 || settings.MainHeight != 800 || settings.OverlayWidth != 600 || settings.OverlayHeight != 400 {
+		t.Fatalf("expected saved window sizes, got %#v", settings)
 	}
 }
 

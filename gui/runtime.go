@@ -50,7 +50,8 @@ func (s *shell) loadLog(path string, back time.Duration) {
 		tracker := combat.NewFightTracker()
 		xpSession := xp.NewSession()
 		if back != 0 {
-			tracker, xpSession, err = engine.ReplayWithProgress(path, combat.DefaultIdleTimeout, back, time.Time{}, combat.DefaultFightHistory, limit, func(progress engine.ReplayProgress) {
+			idleTimeout := time.Duration(s.combatIdleNanos.Load())
+			tracker, xpSession, err = engine.ReplayWithProgress(path, idleTimeout, back, time.Time{}, combat.DefaultFightHistory, limit, func(progress engine.ReplayProgress) {
 				s.sendCombatUpdate(combatUpdate{progress: &progress})
 			}, cancel)
 			if err != nil {
@@ -64,11 +65,17 @@ func (s *shell) loadLog(path string, back time.Duration) {
 		}
 		xpSnapshot := xpSession.SnapshotAtLatestLog()
 		s.sendCombatUpdate(combatUpdate{fights: snapshotFights(tracker), status: filepathBase(path) + " · " + historyStatus(back), loadDone: true, xp: &xpSnapshot, state: "live"})
-		err = engine.Follow(path, limit, cancel, func(line string, endOffset int64) {
-			engine.ProcessLine(line, tracker, xpSession, combat.DefaultIdleTimeout)
+		err = engine.FollowWithPoll(path, limit, cancel, func(line string, endOffset int64) {
+			idleTimeout := time.Duration(s.combatIdleNanos.Load())
+			engine.ProcessLine(line, tracker, xpSession, idleTimeout)
 			s.processSkyLine(path, line, endOffset)
 			xpSnapshot := xpSession.SnapshotLive(time.Now())
 			s.sendCombatUpdate(combatUpdate{fights: snapshotFights(tracker), status: filepathBase(path) + " · live", xp: &xpSnapshot, state: "live"})
+		}, func(now time.Time) {
+			idleTimeout := time.Duration(s.combatIdleNanos.Load())
+			if tracker.EndIdle(now, idleTimeout) {
+				s.sendCombatUpdate(combatUpdate{fights: snapshotFights(tracker), status: filepathBase(path) + " · live", state: "live"})
+			}
 		})
 		if err != nil {
 			s.sendCombatUpdate(combatUpdate{status: err.Error(), state: "error"})

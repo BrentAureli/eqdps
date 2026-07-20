@@ -72,3 +72,22 @@ func TestFollowReportsCompleteLinesAndOffsets(t *testing.T) {
 		t.Fatalf("line=%q offset=%d, want %q offset=%d", gotLine, gotOffset, line, len(line))
 	}
 }
+
+func TestFollowWithPollInvokesIdleCallbackAtEOF(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "eqlog_Test_server.txt")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	polled := false
+	err := FollowWithPoll(path, 0, done, func(string, int64) {}, func(time.Time) {
+		polled = true
+		close(done)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !polled {
+		t.Fatal("expected EOF poll callback")
+	}
+}

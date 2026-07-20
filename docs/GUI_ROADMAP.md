@@ -73,7 +73,8 @@ last dragged position; the rule therefore provides a stable chosen position.
 - Open a separate compact current-fight window.
 - Make it borderless, always on top, draggable, and resizable.
 - Apply adjustable whole-window opacity.
-- Add lock/unlock behavior and remember its geometry and opacity.
+- Remember its size and expire retained fights with the configurable combat
+  idle timeout. Screen position remains compositor-managed.
 - Validate Windows first, then investigate Linux/X11 support.
 
 **Complete when:** the overlay can remain legible over EverQuest while the game

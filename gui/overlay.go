@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"gioui.org/app"
 	"gioui.org/font"
@@ -30,11 +31,16 @@ type combatOverlay struct {
 	list        widget.List
 	decorations widget.Decorations
 	fights      []fakeFightSection
+	idleTimeout time.Duration
+	completedAt time.Time
+	lastWidth   int
+	lastHeight  int
 }
 
 type overlayUpdate struct {
-	fights    []fakeFightSection
-	fontScale float32
+	fights      []fakeFightSection
+	fontScale   float32
+	idleTimeout time.Duration
 }
 
 func (s *shell) openOverlay() {
@@ -45,8 +51,9 @@ func (s *shell) openOverlay() {
 	window := new(app.Window)
 	window.Option(
 		app.Title("eqdps — Current Fight"),
-		app.Size(unit.Dp(520), unit.Dp(310)),
+		app.Size(unit.Dp(s.settings.OverlayWidth), unit.Dp(s.settings.OverlayHeight)),
 		app.MinSize(unit.Dp(380), unit.Dp(180)),
+		app.Decorated(false),
 		app.TopMost(true),
 	)
 	// Gio text shapers maintain mutable caches and must not be shared by
@@ -119,13 +126,13 @@ func (s *shell) pushOverlay(fights []fakeFightSection) {
 		return
 	}
 	select {
-	case s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale}:
+	case s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale, idleTimeout: time.Duration(s.combatIdleNanos.Load())}:
 	default:
 		select {
 		case <-s.overlay.updates:
 		default:
 		}
-		s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale}
+		s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale, idleTimeout: time.Duration(s.combatIdleNanos.Load())}
 	}
 	s.overlay.window.Invalidate()
 }
@@ -142,6 +149,8 @@ func (o *combatOverlay) run() error {
 			return event.Err
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, event)
+			o.lastWidth = int(gtx.Metric.PxToDp(gtx.Constraints.Max.X))
+			o.lastHeight = int(gtx.Metric.PxToDp(gtx.Constraints.Max.Y))
 			o.update()
 			o.layout(gtx)
 			event.Frame(gtx.Ops)
@@ -153,8 +162,22 @@ func (o *combatOverlay) update() {
 	for {
 		select {
 		case update := <-o.updates:
+			hadCurrent := hasCurrentFight(o.fights)
 			o.fights = update.fights
 			o.theme.TextSize = unit.Sp(16 * update.fontScale)
+			o.idleTimeout = update.idleTimeout
+			hasCurrent := hasCurrentFight(o.fights)
+			switch {
+			case hasCurrent:
+				o.completedAt = time.Time{}
+			case len(o.fights) > 0 && (hadCurrent || o.completedAt.IsZero()):
+				o.completedAt = time.Now()
+				// An idle-ended fight has already spent the configured timeout
+				// without activity; do not retain it for a second timeout.
+				if o.fights[0].status == "idle timeout" {
+					o.completedAt = o.completedAt.Add(-o.idleTimeout)
+				}
+			}
 		default:
 			return
 		}
@@ -162,6 +185,10 @@ func (o *combatOverlay) update() {
 }
 
 func (o *combatOverlay) displayFight() *fakeFightSection {
+	return o.displayFightAt(time.Now())
+}
+
+func (o *combatOverlay) displayFightAt(now time.Time) *fakeFightSection {
 	var prioritized, newest *fakeFightSection
 	for index := range o.fights {
 		fight := &o.fights[index]
@@ -181,6 +208,9 @@ func (o *combatOverlay) displayFight() *fakeFightSection {
 	if newest != nil {
 		return newest
 	}
+	if o.idleTimeout > 0 && !o.completedAt.IsZero() && !now.Before(o.completedAt.Add(o.idleTimeout)) {
+		return nil
+	}
 	// DisplaySections orders completed history newest first. Keeping its first
 	// entry visible avoids blanking the meter between fights.
 	if len(o.fights) > 0 {
@@ -189,9 +219,21 @@ func (o *combatOverlay) displayFight() *fakeFightSection {
 	return nil
 }
 
+func hasCurrentFight(fights []fakeFightSection) bool {
+	for _, fight := range fights {
+		if fight.current {
+			return true
+		}
+	}
+	return false
+}
+
 func (o *combatOverlay) layout(gtx layout.Context) layout.Dimensions {
 	fill(gtx, palette.window)
 	fight := o.displayFight()
+	if fight != nil && !hasCurrentFight(o.fights) && o.idleTimeout > 0 && !o.completedAt.IsZero() {
+		gtx.Execute(op.InvalidateCmd{At: o.completedAt.Add(o.idleTimeout)})
+	}
 	return layout.Stack{}.Layout(gtx,
 		layout.Expanded(func(gtx layout.Context) layout.Dimensions {
 			if fight == nil {
