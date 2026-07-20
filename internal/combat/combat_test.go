@@ -59,10 +59,27 @@ func TestMeterTracksOnlyIntentionalDamageForOverlayPriority(t *testing.T) {
 	meter.Add(Event{Time: now.Add(time.Second), Source: "You", Target: "mob", Amount: 11, Passive: true})
 	meter.Add(Event{Time: now.Add(2 * time.Second), Source: "You", Target: "mob", Amount: 12, Passive: true, DamageOverTime: true})
 	meter.Add(Event{Time: now.Add(3 * time.Second), Source: "You", Target: "mob", Amount: 13, Incidental: true})
+	meter.Add(Event{Time: now.Add(4 * time.Second), Source: "You", Target: "mob", Amount: 14, Ability: "Unmatched Proc"})
 
 	players := meter.Players()
 	if len(players) != 1 || !players[0].LastIntentionalDamage.Equal(now) {
 		t.Fatalf("passive or incidental damage changed overlay priority: %#v", players)
+	}
+}
+
+func TestFightTrackerCountsExplicitCastAsIntentionalButNotProc(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "proc target", Amount: 10, Ability: "Smiting Strike"})
+	tracker.AddCast(Cast{Time: now, Source: "You", Ability: "Fire Bolt"})
+	tracker.AddDamage(Event{Time: now.Add(time.Second), Source: "You", Target: "cast target", Amount: 11, Ability: "Fire Bolt"})
+
+	orders := make(map[string]uint64)
+	for _, section := range tracker.DisplaySections() {
+		orders[section.Fight.Mob] = section.Fight.LastYouIntentionalOrder
+	}
+	if orders["proc target"] != 0 || orders["cast target"] == 0 {
+		t.Fatalf("unexpected proc/cast targeting order: %#v", orders)
 	}
 }
 

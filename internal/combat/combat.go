@@ -156,7 +156,7 @@ func (m *Meter) Add(event Event) {
 	if event.Source == "You" && !event.Incidental && (!event.Passive || event.DamageOverTime) && stats.EngagedAt.IsZero() {
 		stats.EngagedAt = event.Time
 	}
-	if !event.Passive && !event.Incidental && event.Time.After(stats.LastIntentionalDamage) {
+	if intentionalTargetDamage(event) && event.Time.After(stats.LastIntentionalDamage) {
 		stats.LastIntentionalDamage = event.Time
 	}
 	m.events++
@@ -585,13 +585,17 @@ func (t *FightTracker) ForgetEnemies(timestamp time.Time) {
 func (t *FightTracker) addEvent(record *trackedMob, event Event, mobEndpoint string) {
 	record.lastWallSeen = time.Now()
 	record.fight.Meter.Add(event)
-	if event.Source == "You" && !event.Passive && !event.Incidental {
+	if event.Source == "You" && intentionalTargetDamage(event) {
 		t.intentionalOrder++
 		record.fight.LastYouIntentionalOrder = t.intentionalOrder
 	}
 	if sameCombatant(mobEndpoint, record.fight.Mob) {
 		record.primarySeen = true
 	}
+}
+
+func intentionalTargetDamage(event Event) bool {
+	return !event.Passive && !event.Incidental && (event.Ability == "" || event.DirectCast)
 }
 
 func (t *FightTracker) AddDeath(death Death) {

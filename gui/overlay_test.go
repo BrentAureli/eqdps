@@ -81,6 +81,25 @@ func TestOverlayKeepsLastIntentionalTargetWhileOnlyIncidentalFightRemains(t *tes
 	}
 }
 
+func TestOverlayStabilizesRapidTargetChanges(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	overlay := combatOverlay{fights: []fakeFightSection{{name: "original", current: true, lastYouIntentionalOrder: 1}}}
+	overlay.observeFocus(now)
+
+	overlay.fights = []fakeFightSection{
+		{name: "original", current: true, lastYouIntentionalOrder: 1},
+		{name: "mirrored hit", current: true, lastYouIntentionalOrder: 2},
+	}
+	overlay.observeFocus(now.Add(time.Millisecond))
+	if got := overlay.displayFightAt(now.Add(100 * time.Millisecond)); got == nil || got.name != "original" {
+		t.Fatalf("focus changed before stabilization delay: %#v", got)
+	}
+	overlay.commitFocus(now.Add(overlayFocusDelay + time.Millisecond))
+	if got := overlay.displayFightAt(now.Add(overlayFocusDelay + time.Millisecond)); got == nil || got.name != "mirrored hit" {
+		t.Fatalf("focus did not settle on final target: %#v", got)
+	}
+}
+
 func TestWaylandSessionDetection(t *testing.T) {
 	t.Setenv("XDG_SESSION_TYPE", "wayland")
 	t.Setenv("WAYLAND_DISPLAY", "")

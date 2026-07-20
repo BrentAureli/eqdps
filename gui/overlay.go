@@ -23,19 +23,24 @@ import (
 )
 
 type combatOverlay struct {
-	window      *app.Window
-	theme       *material.Theme
-	updates     chan overlayUpdate
-	closed      chan<- *combatOverlay
-	owner       *app.Window
-	list        widget.List
-	decorations widget.Decorations
-	fights      []fakeFightSection
-	idleTimeout time.Duration
-	completedAt time.Time
-	lastWidth   int
-	lastHeight  int
+	window           *app.Window
+	theme            *material.Theme
+	updates          chan overlayUpdate
+	closed           chan<- *combatOverlay
+	owner            *app.Window
+	list             widget.List
+	decorations      widget.Decorations
+	fights           []fakeFightSection
+	idleTimeout      time.Duration
+	completedAt      time.Time
+	lastWidth        int
+	lastHeight       int
+	focusOrder       uint64
+	focusCandidate   uint64
+	focusCandidateAt time.Time
 }
+
+const overlayFocusDelay = 200 * time.Millisecond
 
 type overlayUpdate struct {
 	fights      []fakeFightSection
@@ -166,6 +171,7 @@ func (o *combatOverlay) update() {
 			o.fights = update.fights
 			o.theme.TextSize = unit.Sp(16 * update.fontScale)
 			o.idleTimeout = update.idleTimeout
+			o.observeFocus(time.Now())
 			hasCurrent := hasCurrentFight(o.fights)
 			switch {
 			case hasCurrent:
@@ -202,11 +208,20 @@ func (o *combatOverlay) displayFightAt(now time.Time) *fakeFightSection {
 			newest = fight
 		}
 	}
-	if latestIntentional != nil {
+	focused := latestIntentional
+	if o.focusOrder > 0 {
+		for index := range o.fights {
+			if o.fights[index].lastYouIntentionalOrder == o.focusOrder {
+				focused = &o.fights[index]
+				break
+			}
+		}
+	}
+	if focused != nil {
 		if newest == nil && o.idleTimeout > 0 && !o.completedAt.IsZero() && !now.Before(o.completedAt.Add(o.idleTimeout)) {
 			return nil
 		}
-		return latestIntentional
+		return focused
 	}
 	if newest != nil {
 		return newest
@@ -222,6 +237,40 @@ func (o *combatOverlay) displayFightAt(now time.Time) *fakeFightSection {
 	return nil
 }
 
+func (o *combatOverlay) observeFocus(now time.Time) {
+	latest := latestIntentionalOrder(o.fights)
+	switch {
+	case latest == 0:
+		return
+	case o.focusOrder == 0:
+		o.focusOrder = latest
+		o.focusCandidate = 0
+	case latest == o.focusOrder:
+		o.focusCandidate = 0
+	case latest != o.focusCandidate:
+		o.focusCandidate = latest
+		o.focusCandidateAt = now.Add(overlayFocusDelay)
+	}
+}
+
+func (o *combatOverlay) commitFocus(now time.Time) {
+	if o.focusCandidate == 0 || now.Before(o.focusCandidateAt) {
+		return
+	}
+	if latestIntentionalOrder(o.fights) == o.focusCandidate {
+		o.focusOrder = o.focusCandidate
+	}
+	o.focusCandidate = 0
+}
+
+func latestIntentionalOrder(fights []fakeFightSection) uint64 {
+	var latest uint64
+	for _, fight := range fights {
+		latest = max(latest, fight.lastYouIntentionalOrder)
+	}
+	return latest
+}
+
 func hasCurrentFight(fights []fakeFightSection) bool {
 	for _, fight := range fights {
 		if fight.current {
@@ -233,7 +282,12 @@ func hasCurrentFight(fights []fakeFightSection) bool {
 
 func (o *combatOverlay) layout(gtx layout.Context) layout.Dimensions {
 	fill(gtx, palette.window)
-	fight := o.displayFight()
+	now := time.Now()
+	o.commitFocus(now)
+	if o.focusCandidate > 0 {
+		gtx.Execute(op.InvalidateCmd{At: o.focusCandidateAt})
+	}
+	fight := o.displayFightAt(now)
 	if fight != nil && !hasCurrentFight(o.fights) && o.idleTimeout > 0 && !o.completedAt.IsZero() {
 		gtx.Execute(op.InvalidateCmd{At: o.completedAt.Add(o.idleTimeout)})
 	}
