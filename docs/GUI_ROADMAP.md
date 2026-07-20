@@ -13,9 +13,9 @@ From the repository root:
 go run ./gui
 ```
 
-The application-shell milestone currently uses fake combat and character data.
-It is for evaluating layout, navigation, density, colors, and interaction before
-the GUI is connected to a logfile.
+The current preview opens and remembers EverQuest logfiles, replays selected
+history ranges with progress, follows live combat, and renders shared parser
+results in the graphical combat tree.
 
 ## 1. Application Shell
 
@@ -40,11 +40,13 @@ and visual direction without requiring a logfile.
 
 The current integration remembers the last logfile, restores it in live-only
 mode at startup, and offers initial/reload ranges for one, four, eight hours, or
-the full file. Replay progress presentation remains to be added.
+the full file with replay progress.
 
 **Complete when:** the GUI can serve as a minimal live graphical DPS meter.
 
 ## 3. Overlay Proof of Concept
+
+**Status:** normal second-window live-data prototype available
 
 - Open a separate compact current-fight window.
 - Make it borderless, always on top, draggable, and resizable.

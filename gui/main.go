@@ -60,6 +60,8 @@ type shell struct {
 	loadBytes     int64
 	loadTotal     int64
 	loadLines     int
+	overlay       *combatOverlay
+	overlayClosed chan *combatOverlay
 	fights        []fakeFightSection
 	menus         []menu
 	rail          []railItem
@@ -213,6 +215,7 @@ func newShell(window *app.Window) *shell {
 		statusText:    statusText,
 		fileChosen:    make(chan fileChoice, 1),
 		combatUpdates: make(chan combatUpdate, 1),
+		overlayClosed: make(chan *combatOverlay, 1),
 		fights:        fakeFights,
 		treeClicks:    make(map[string]*widget.Clickable),
 		expanded: map[string]bool{
@@ -223,7 +226,7 @@ func newShell(window *app.Window) *shell {
 		menus: []menu{
 			{name: "File", items: []menuItem{{name: "Open logfile", detail: "Choose a file and initial history", enabled: true, items: ranges}, {name: "Recent logfiles", enabled: len(recents) > 0, items: recents}, {name: "Exit", enabled: true, action: "exit"}}},
 			{name: "Combat", items: []menuItem{{name: "Current fight", enabled: true}, {name: "Load history", enabled: currentLog != "", items: historyRangeItems("reload")}, {name: "Filter…", enabled: true}}},
-			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true}, {name: "Plane of Sky", enabled: true}, {name: "DPS overlay", detail: "Not available in this preview", enabled: false}}},
+			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true}, {name: "Plane of Sky", enabled: true}, {name: "DPS overlay", detail: "Open compact current-fight window", enabled: true, action: "overlay"}}},
 			{name: "Tools", items: []menuItem{{name: "Preferences…", enabled: true}}},
 			{name: "Help", items: []menuItem{{name: "About eqdps", enabled: true}}},
 		},
@@ -254,6 +257,13 @@ func (s *shell) layout(gtx layout.Context) layout.Dimensions {
 
 func (s *shell) update(gtx layout.Context) {
 	select {
+	case closed := <-s.overlayClosed:
+		if s.overlay == closed {
+			s.overlay = nil
+		}
+	default:
+	}
+	select {
 	case choice := <-s.fileChosen:
 		if choice.err == nil {
 			s.rememberChosenFile(choice)
@@ -277,6 +287,7 @@ func (s *shell) update(gtx layout.Context) {
 		}
 		if update.fights != nil {
 			s.fights = update.fights
+			s.pushOverlay(update.fights)
 		}
 		if update.status != "" {
 			s.statusText = update.status
@@ -402,6 +413,8 @@ func (s *shell) activateItem(item menuItem) {
 		s.rememberChosenFile(fileChoice{path: item.path})
 	case "reload":
 		s.loadLog(s.currentLog, item.back)
+	case "overlay":
+		s.openOverlay()
 	case "exit":
 		s.window.Perform(system.ActionClose)
 	}
