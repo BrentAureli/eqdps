@@ -95,9 +95,26 @@ hl.window_rule({
 ```
 
 Change `move` and `opacity` to taste. KDE Plasma users can create an equivalent
-Window Rule matching the title `eqdps — Current Fight`. Sway users can match
-the same title with `for_window` and enable floating/sticky behavior. GNOME
-Wayland may require an extension for persistent always-on-top behavior.
+Window Rule as described below. Sway users can match the same title with
+`for_window` and enable floating/sticky behavior. GNOME Wayland may require an
+extension for persistent always-on-top behavior.
+
+##### KDE Plasma Window Rules
+
+KDE Plasma includes Window Rules as a standard feature. Open the DPS overlay,
+right-click its title bar, and enable **Keep Above Others**. Under **More
+Actions**, enable **No Titlebar and Frame** after placing the window where you
+want it. The small drag handle inside the overlay remains available for moving
+the undecorated window.
+
+![KDE Plasma overlay window actions](img/kde_overlay_fix_1.png)
+
+To make the behavior persistent, choose **More Actions → Configure Special
+Window Settings** before removing the title bar. Match the exact window title
+`eqdps — Current Fight`, add the **Layer** property, and set it to **Force →
+Overlay**.
+
+![KDE Plasma Window Rule for the eqdps overlay](img/kde_overlay_fix_2.png)
 
 By default, combat live mode starts at the current end of the log file and only
 parses new combat lines written after startup. Once Plane of Sky tracking is
@@ -245,6 +262,10 @@ Build the terminal application:
 ```bash
 go build -o eqdps ./tui
 ```
+
+## Thank yous
+
+Big thank you to my Guild **Side Gigg** off Rivervale. Also many many thanks to Karthar for providing test data, testing the application, giving feadback, providing KDE fixes and beeing awesome during the development.
 
 ## License
 
