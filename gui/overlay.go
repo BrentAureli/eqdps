@@ -20,11 +20,16 @@ import (
 type combatOverlay struct {
 	window  *app.Window
 	theme   *material.Theme
-	updates chan []fakeFightSection
+	updates chan overlayUpdate
 	closed  chan<- *combatOverlay
 	owner   *app.Window
 	list    widget.List
 	fights  []fakeFightSection
+}
+
+type overlayUpdate struct {
+	fights    []fakeFightSection
+	fontScale float32
 }
 
 func (s *shell) openOverlay() {
@@ -47,7 +52,7 @@ func (s *shell) openOverlay() {
 	overlay := &combatOverlay{
 		window:  window,
 		theme:   theme,
-		updates: make(chan []fakeFightSection, 1),
+		updates: make(chan overlayUpdate, 1),
 		closed:  s.overlayClosed,
 		owner:   s.window,
 		list:    widget.List{List: layout.List{Axis: layout.Vertical}},
@@ -109,13 +114,13 @@ func (s *shell) pushOverlay(fights []fakeFightSection) {
 		return
 	}
 	select {
-	case s.overlay.updates <- fights:
+	case s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale}:
 	default:
 		select {
 		case <-s.overlay.updates:
 		default:
 		}
-		s.overlay.updates <- fights
+		s.overlay.updates <- overlayUpdate{fights: fights, fontScale: s.settings.DPSFontScale}
 	}
 	s.overlay.window.Invalidate()
 }
@@ -142,8 +147,9 @@ func (o *combatOverlay) run() error {
 func (o *combatOverlay) update() {
 	for {
 		select {
-		case fights := <-o.updates:
-			o.fights = fights
+		case update := <-o.updates:
+			o.fights = update.fights
+			o.theme.TextSize = unit.Sp(16 * update.fontScale)
 		default:
 			return
 		}

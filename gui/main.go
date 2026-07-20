@@ -66,6 +66,10 @@ type shell struct {
 	openAfterHelp bool
 	rememberHelp  bool
 	helpClose     widget.Clickable
+	mainScale     widget.Float
+	dpsScale      widget.Float
+	dpsOpacity    widget.Float
+	prefsDirty    bool
 	fights        []fakeFightSection
 	menus         []menu
 	rail          []railItem
@@ -195,6 +199,8 @@ func newShell(window *app.Window) *shell {
 	theme.Palette.Fg = palette.text
 	theme.Palette.Bg = palette.window
 	settings, settingsErr := loadSettings()
+	settings.normalize()
+	theme.TextSize = unit.Sp(16 * settings.MainFontScale)
 	statusText := "No logfile selected"
 	currentLog := ""
 	if settingsErr != nil {
@@ -232,11 +238,14 @@ func newShell(window *app.Window) *shell {
 			{name: "File", items: []menuItem{{name: "Open logfile", detail: "Choose a file and initial history", enabled: true, items: ranges}, {name: "Recent logfiles", enabled: len(recents) > 0, items: recents}, {name: "Exit", enabled: true, action: "exit"}}},
 			{name: "Combat", items: []menuItem{{name: "Current fight", enabled: true}, {name: "Load history", enabled: currentLog != "", items: historyRangeItems("reload")}, {name: "Filter…", enabled: true}}},
 			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true}, {name: "Plane of Sky", enabled: true}, {name: "Show DPS overlay", detail: "Toggle compact current-fight window", enabled: true, action: "overlay"}}},
-			{name: "Tools", items: []menuItem{{name: "Preferences…", enabled: true}}},
+			{name: "Tools", items: []menuItem{{name: "Preferences…", enabled: true, action: "preferences"}}},
 			{name: "Help", items: []menuItem{{name: "Wayland overlay setup…", enabled: true, action: "wayland-help"}, {name: "About eqdps", enabled: true}}},
 		},
 		rail: []railItem{{short: "DPS", name: "Combat Log"}, {short: "SKY", name: "Plane of Sky"}, {short: "SET", name: "Settings"}},
 	}
+	result.mainScale.Value = settingToSlider(settings.MainFontScale, .75, 1.5)
+	result.dpsScale.Value = settingToSlider(settings.DPSFontScale, .75, 1.5)
+	result.dpsOpacity.Value = settingToSlider(settings.DPSOpacity, .35, 1)
 	if currentLog != "" {
 		result.loadLog(currentLog, 0)
 	}
@@ -447,6 +456,8 @@ func (s *shell) activateItem(item menuItem) {
 		s.toggleOverlay()
 	case "wayland-help":
 		s.showWaylandHelp()
+	case "preferences":
+		s.workspace = 2
 	case "exit":
 		s.window.Perform(system.ActionClose)
 	}
@@ -573,7 +584,7 @@ func (s *shell) layoutWorkspace(gtx layout.Context) layout.Dimensions {
 	case 1:
 		return s.layoutPlaceholder(gtx, "Plane of Sky", "Quest progress will use this dedicated workspace.")
 	case 2:
-		return s.layoutPlaceholder(gtx, "Settings", "Application, logfile, and overlay preferences will live here.")
+		return s.layoutPreferences(gtx)
 	default:
 		return s.layoutDamageMeter(gtx)
 	}
@@ -900,7 +911,7 @@ func label(gtx layout.Context, theme *material.Theme, value string, size unit.Sp
 }
 
 func labelWeight(gtx layout.Context, theme *material.Theme, value string, size unit.Sp, foreground color.NRGBA, align text.Alignment, weight font.Weight) layout.Dimensions {
-	style := material.Label(theme, size, value)
+	style := material.Label(theme, size*theme.TextSize/16, value)
 	style.Color = foreground
 	style.Alignment = align
 	style.Font.Weight = weight

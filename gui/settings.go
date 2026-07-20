@@ -14,6 +14,28 @@ type guiSettings struct {
 	RecentLogfiles []string `json:"recent_logfiles,omitempty"`
 	OverlayVisible bool     `json:"overlay_visible,omitempty"`
 	WaylandNotice  bool     `json:"wayland_overlay_notice_shown,omitempty"`
+	MainFontScale  float32  `json:"main_font_scale,omitempty"`
+	DPSFontScale   float32  `json:"dps_font_scale,omitempty"`
+	DPSOpacity     float32  `json:"dps_opacity,omitempty"`
+}
+
+func (settings *guiSettings) normalize() {
+	settings.MainFontScale = clampSetting(settings.MainFontScale, .75, 1.5, 1)
+	settings.DPSFontScale = clampSetting(settings.DPSFontScale, .75, 1.5, 1)
+	settings.DPSOpacity = clampSetting(settings.DPSOpacity, .35, 1, .8)
+}
+
+func clampSetting(value, minimum, maximum, fallback float32) float32 {
+	if value == 0 {
+		return fallback
+	}
+	if value < minimum {
+		return minimum
+	}
+	if value > maximum {
+		return maximum
+	}
+	return value
 }
 
 func settingsPath() (string, error) {
@@ -40,6 +62,7 @@ func loadSettings() (guiSettings, error) {
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return guiSettings{}, err
 	}
+	settings.normalize()
 	return settings, nil
 }
 

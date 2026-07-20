@@ -20,6 +20,22 @@ func TestOverlayVisibilityRoundTripsThroughSettingsJSON(t *testing.T) {
 	}
 }
 
+func TestSettingsNormalizationAddsPreferenceDefaults(t *testing.T) {
+	settings := guiSettings{}
+	settings.normalize()
+	if settings.MainFontScale != 1 || settings.DPSFontScale != 1 || settings.DPSOpacity != .8 {
+		t.Fatalf("unexpected preference defaults: %#v", settings)
+	}
+}
+
+func TestSettingsNormalizationClampsPreferenceRanges(t *testing.T) {
+	settings := guiSettings{MainFontScale: .1, DPSFontScale: 3, DPSOpacity: .1}
+	settings.normalize()
+	if settings.MainFontScale != .75 || settings.DPSFontScale != 1.5 || settings.DPSOpacity != .35 {
+		t.Fatalf("unexpected clamped preferences: %#v", settings)
+	}
+}
+
 func TestRememberLogMovesPathToFrontWithoutDuplicates(t *testing.T) {
 	settings := guiSettings{RecentLogfiles: []string{"/one", "/two", "/three"}}
 	settings.rememberLog("/two")
