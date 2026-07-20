@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	gioui.org v0.10.1
 	github.com/ncruces/zenity v0.10.14
+	github.com/uija/eqdps v0.0.0
 )
 
 require (
