@@ -104,18 +104,23 @@ func (o *combatOverlay) update() {
 	}
 }
 
-func (o *combatOverlay) currentFight() *fakeFightSection {
+func (o *combatOverlay) displayFight() *fakeFightSection {
 	for index := range o.fights {
 		if o.fights[index].current {
 			return &o.fights[index]
 		}
+	}
+	// DisplaySections orders completed history newest first. Keeping its first
+	// entry visible avoids blanking the meter between fights.
+	if len(o.fights) > 0 {
+		return &o.fights[0]
 	}
 	return nil
 }
 
 func (o *combatOverlay) layout(gtx layout.Context) layout.Dimensions {
 	fill(gtx, palette.window)
-	fight := o.currentFight()
+	fight := o.displayFight()
 	if fight == nil {
 		return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			return label(gtx, o.theme, "Waiting for combat…", unit.Sp(18), palette.muted, text.Middle)
