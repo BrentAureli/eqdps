@@ -66,6 +66,21 @@ func TestMeterTracksOnlyIntentionalDamageForOverlayPriority(t *testing.T) {
 	}
 }
 
+func TestFightTrackerOrdersIntentionalTargetsWithinSameTimestamp(t *testing.T) {
+	tracker := NewFightTracker()
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "first mob", Amount: 10})
+	tracker.AddDamage(Event{Time: now, Source: "You", Target: "second mob", Amount: 11})
+
+	orders := make(map[string]uint64)
+	for _, section := range tracker.DisplaySections() {
+		orders[section.Fight.Mob] = section.Fight.LastYouIntentionalOrder
+	}
+	if orders["second mob"] <= orders["first mob"] {
+		t.Fatalf("expected logfile order to break timestamp tie: %#v", orders)
+	}
+}
+
 func TestFightTrackerSeparatesCastMagicFromProcs(t *testing.T) {
 	tracker := NewFightTracker()
 	now := time.Date(2026, 7, 15, 18, 53, 34, 0, time.UTC)

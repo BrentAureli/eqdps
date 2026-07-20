@@ -401,10 +401,11 @@ func meleeName(attack string) string {
 }
 
 type Fight struct {
-	Mob       string
-	Meter     *Meter
-	Death     Death
-	EndReason string
+	Mob                     string
+	Meter                   *Meter
+	Death                   Death
+	EndReason               string
+	LastYouIntentionalOrder uint64
 }
 
 func (f *Fight) ActiveDuration() time.Duration {
@@ -441,12 +442,13 @@ type forgottenMob struct {
 }
 
 type FightTracker struct {
-	active       map[string]*trackedMob
-	history      []*Fight
-	historyLimit int
-	players      map[string]bool
-	forgotten    map[string]*forgottenMob
-	pendingCasts map[string]pendingCast
+	active           map[string]*trackedMob
+	history          []*Fight
+	historyLimit     int
+	players          map[string]bool
+	forgotten        map[string]*forgottenMob
+	pendingCasts     map[string]pendingCast
+	intentionalOrder uint64
 }
 
 type pendingCast struct {
@@ -583,6 +585,10 @@ func (t *FightTracker) ForgetEnemies(timestamp time.Time) {
 func (t *FightTracker) addEvent(record *trackedMob, event Event, mobEndpoint string) {
 	record.lastWallSeen = time.Now()
 	record.fight.Meter.Add(event)
+	if event.Source == "You" && !event.Passive && !event.Incidental {
+		t.intentionalOrder++
+		record.fight.LastYouIntentionalOrder = t.intentionalOrder
+	}
 	if sameCombatant(mobEndpoint, record.fight.Mob) {
 		record.primarySeen = true
 	}

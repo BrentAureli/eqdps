@@ -189,21 +189,24 @@ func (o *combatOverlay) displayFight() *fakeFightSection {
 }
 
 func (o *combatOverlay) displayFightAt(now time.Time) *fakeFightSection {
-	var prioritized, newest *fakeFightSection
+	var newest, latestIntentional *fakeFightSection
 	for index := range o.fights {
 		fight := &o.fights[index]
+		if fight.lastYouIntentionalOrder > 0 && (latestIntentional == nil || fight.lastYouIntentionalOrder > latestIntentional.lastYouIntentionalOrder) {
+			latestIntentional = fight
+		}
 		if !fight.current {
 			continue
-		}
-		if !fight.lastYouIntentional.IsZero() && (prioritized == nil || fight.lastYouIntentional.After(prioritized.lastYouIntentional)) {
-			prioritized = fight
 		}
 		if newest == nil || fight.started.After(newest.started) {
 			newest = fight
 		}
 	}
-	if prioritized != nil {
-		return prioritized
+	if latestIntentional != nil {
+		if newest == nil && o.idleTimeout > 0 && !o.completedAt.IsZero() && !now.Before(o.completedAt.Add(o.idleTimeout)) {
+			return nil
+		}
+		return latestIntentional
 	}
 	if newest != nil {
 		return newest

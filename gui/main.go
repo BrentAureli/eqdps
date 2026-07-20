@@ -172,11 +172,11 @@ type fakeBreakdown struct {
 }
 
 type fakeFightSection struct {
-	name, status, duration string
-	current                bool
-	started                time.Time
-	lastYouIntentional     time.Time
-	combatants             []fakeCombatant
+	name, status, duration  string
+	current                 bool
+	started                 time.Time
+	lastYouIntentionalOrder uint64
+	combatants              []fakeCombatant
 }
 
 func main() {

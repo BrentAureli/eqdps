@@ -47,12 +47,37 @@ func TestOverlayPrefersCurrentFightMostRecentlyDamagedIntentionallyByYou(t *test
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	overlay := combatOverlay{fights: []fakeFightSection{
 		{name: "newer incidental fight", current: true, started: now.Add(10 * time.Second)},
-		{name: "your target", current: true, started: now, lastYouIntentional: now.Add(5 * time.Second)},
-		{name: "your previous target", current: true, started: now.Add(2 * time.Second), lastYouIntentional: now.Add(time.Second)},
+		{name: "your target", current: true, started: now, lastYouIntentionalOrder: 2},
+		{name: "your previous target", current: true, started: now.Add(2 * time.Second), lastYouIntentionalOrder: 1},
 	}}
 
 	if got := overlay.displayFight(); got == nil || got.name != "your target" {
 		t.Fatalf("expected latest intentional target, got %#v", got)
+	}
+}
+
+func TestOverlayRetainsMostRecentlyAttackedFightAfterConcurrentKills(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	overlay := combatOverlay{fights: []fakeFightSection{
+		{name: "first tracker section", lastYouIntentionalOrder: 1},
+		{name: "last target killed", lastYouIntentionalOrder: 3},
+		{name: "middle target", lastYouIntentionalOrder: 2},
+	}}
+
+	if got := overlay.displayFightAt(now.Add(3 * time.Second)); got == nil || got.name != "last target killed" {
+		t.Fatalf("expected most recently attacked completed fight, got %#v", got)
+	}
+}
+
+func TestOverlayKeepsLastIntentionalTargetWhileOnlyIncidentalFightRemains(t *testing.T) {
+	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	overlay := combatOverlay{fights: []fakeFightSection{
+		{name: "incidental active fight", current: true, started: now.Add(time.Second)},
+		{name: "last intentional target", lastYouIntentionalOrder: 4},
+	}}
+
+	if got := overlay.displayFightAt(now.Add(2 * time.Second)); got == nil || got.name != "last intentional target" {
+		t.Fatalf("expected last intentional target to remain selected, got %#v", got)
 	}
 }
 

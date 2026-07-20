@@ -107,12 +107,9 @@ func snapshotFights(tracker *combat.FightTracker) []fakeFightSection {
 		} else if fight.Death.Killer != "" {
 			status = "slain by " + fight.Death.Killer
 		}
-		entry := fakeFightSection{name: fight.Mob, status: status, duration: formatRuntimeDuration(fight.ActiveDuration()), current: section.Current, started: fight.Meter.Started()}
+		entry := fakeFightSection{name: fight.Mob, status: status, duration: formatRuntimeDuration(fight.ActiveDuration()), current: section.Current, started: fight.Meter.Started(), lastYouIntentionalOrder: fight.LastYouIntentionalOrder}
 		for _, player := range fight.Meter.Players() {
 			sdps, _ := player.EngagedDPS(fight.Meter.Ended())
-			if player.Name == "You" {
-				entry.lastYouIntentional = player.LastIntentionalDamage
-			}
 			combatant := fakeCombatant{name: player.Name, damage: player.Damage, dps: int(player.DPS() + .5), sdps: int(sdps + .5), hits: player.Hits, crits: player.Crits, active: formatRuntimeDuration(player.ActiveDuration()), accent: player.Name == "You"}
 			for _, detail := range sortedPlayerBreakdown(player.Breakdown) {
 				combatant.details = append(combatant.details, snapshotBreakdown(detail))
