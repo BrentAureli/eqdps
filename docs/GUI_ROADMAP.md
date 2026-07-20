@@ -44,9 +44,9 @@ the full file with replay progress.
 
 **Complete when:** the GUI can serve as a minimal live graphical DPS meter.
 
-## 3. Overlay Proof of Concept
+## 3. DPS Overlay
 
-**Status:** normal second-window live-data prototype available
+**Status:** functional on Linux with compositor-specific setup; Windows validation pending
 
 Gio exposes native topmost behavior on Windows and macOS. Wayland compositors
 control floating, stacking, opacity, and placement themselves. For Hyprland
@@ -70,12 +70,15 @@ The `move` coordinates are monitor-local and can be changed to the desired
 starting location. Hyprland persists the floating size, but not an arbitrary
 last dragged position; the rule therefore provides a stable chosen position.
 
-- Open a separate compact current-fight window.
-- Make it borderless, always on top, draggable, and resizable.
-- Apply adjustable whole-window opacity.
-- Remember its size and expire retained fights with the configurable combat
-  idle timeout. Screen position remains compositor-managed.
-- Validate Windows first, then investigate Linux/X11 support.
+- A separate compact, borderless, draggable, and resizable window is available.
+- It follows the latest direct local-player target and updates independently of
+  main-window visibility.
+- Its visible state and size are remembered, and retained fights expire with
+  the configurable combat idle timeout.
+- Wayland stacking, opacity, and screen position remain compositor-managed.
+  Hyprland and KDE are documented; GNOME has a per-window manual workflow.
+- Native Windows topmost behavior and opacity still require validation and
+  implementation during the Windows pass.
 
 **Complete when:** the overlay can remain legible over EverQuest while the game
 is being played. Wayland support remains best effort because compositor rules
@@ -83,7 +86,7 @@ may prevent reliable stacking or placement.
 
 ## 4. Combat Feature Parity
 
-**Status:** core parity available; desktop polish remains
+**Status:** core parity complete; continued live-log validation remains
 
 - Show concurrent active fights and completed history.
 - Add expandable melee, spell, proc, DoT, pet, and damage-shield details.
@@ -110,12 +113,15 @@ Sky workflow as the TUI.
 
 ## 6. Desktop Polish and Releases
 
-- Add logfile selection, recent files, and saved preferences.
-- Remember main-window and overlay state.
-- Add application icons, metadata, and friendly startup/error screens.
-- Produce a Windows GUI build without a console window.
-- Document Linux build requirements and add release automation.
-- Compare GUI and TUI results against the same sample logs.
+- Logfile selection, recent files, saved preferences, and remembered window
+  sizes are implemented.
+- Fedora build requirements and Linux compositor setup are documented.
+- Application icons and desktop metadata remain optional polish.
+- A Windows GUI build without a console window remains pending.
+- GUI/TUI snapshot comparisons and a final real-log validation pass remain
+  useful before release.
+- Release automation is intentionally deferred until Windows packaging is
+  defined, so Linux and Windows artifacts can share one workflow.
 
 **Complete when:** ordinary Windows users can install and operate the GUI
 without terminal knowledge.

@@ -646,12 +646,12 @@ func (s *shell) layoutWaylandHelp(gtx layout.Context) layout.Dimensions {
 	}
 	paint.Fill(gtx.Ops, color.NRGBA{A: 175})
 	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(640)), gtx.Dp(unit.Dp(390)))
+		gtx.Constraints.Min = image.Pt(gtx.Dp(unit.Dp(680)), gtx.Dp(unit.Dp(460)))
 		gtx.Constraints.Max = gtx.Constraints.Min
 		return outline(gtx, palette.line, func(gtx layout.Context) layout.Dimensions {
 			fill(gtx, palette.panel)
 			return layout.UniformInset(unit.Dp(24)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				const guidance = "Wayland compositors decide whether windows float, stay above other windows, and use opacity. eqdps cannot set these properties portably.\n\nHyprland 0.55+: add the title-based rule from the README to hyprland.lua. It can float, pin, position, resize, and apply opacity to ‘eqdps — Current Fight’.\n\nKDE Plasma: create a Window Rule matching that title. Sway: use a for_window rule matching the title. GNOME may require an extension for persistent always-on-top behavior."
+				const guidance = "Wayland compositors decide whether windows float, stay above other windows, and use opacity. eqdps cannot set these properties portably.\n\nHyprland 0.55+: use the title-based rule from the README to float, pin, position, resize, and apply opacity to ‘eqdps — Current Fight’.\n\nKDE Plasma: create a Window Rule matching that title and force its layer to Overlay. The README includes screenshots of the required settings.\n\nGNOME: focus the DPS overlay, press Alt+Space, and select Always on Top. This applies only to the current window and must be repeated after restarting it. A persistent Shell extension is still being tested and is not currently recommended.\n\nSway: use a for_window rule matching the stable window title."
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						return labelWeight(gtx, s.theme, "Configure the DPS overlay on Wayland", unit.Sp(21), palette.text, text.Start, font.SemiBold)

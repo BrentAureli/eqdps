@@ -30,7 +30,7 @@ intentionally not duplicated under `docs/`.
 | `gui/main.go` | Gio application shell, navigation, combat view, and status presentation |
 | `gui/go.mod` | Graphical frontend module and Gio dependency graph |
 | `go.mod` | Shared parser and application-engine module with no UI dependencies |
-| `go.work` | Local workspace connecting the shared and TUI modules |
+| `go.work` | Local workspace connecting the shared, TUI, and GUI modules |
 | `internal/eqlog/parser.go` | Unified log records plus damage, cast, XP, aggro, and death parsing |
 | `internal/engine/log.go` | UI-independent logfile replay, live tailing, and combat/XP record dispatch |
 | `internal/eqlog/parser_test.go` | Exact production log format regressions |
@@ -51,10 +51,10 @@ intentionally not duplicated under `docs/`.
 ```text
 log line
   -> eqlog.ParseRecord (one envelope/timestamp parse)
-  -> main.processRecord
+  -> internal/engine dispatch
   -> combat.FightTracker / xp.Session
   -> combat.Meter / XP snapshot
-  -> text renderer or tview table
+  -> text, tview, or Gio presentation
 ```
 
 Live mode opens the file and seeks to EOF, so invocation without replay flags
@@ -62,21 +62,21 @@ starts at "now." `engine.Follow` polls EOF every 250 ms and processes appended
 lines.
 
 Log replay, live tailing, and combat/XP record dispatch live in
-`internal/engine` and must remain free of `tview`, `tcell`, and any future GUI
-dependency. `tui/main.go` owns the terminal widgets and presentation callbacks.
+`internal/engine` and must remain free of `tview`, `tcell`, Gio, and other
+frontend dependencies. `tui/main.go` and the files under `gui/` own their
+respective widgets and presentation callbacks.
 
-The terminal frontend is a nested module so tview and tcell are absent from the
-shared root module. A future graphical frontend should use another nested module
-(for example `gui/go.mod`) rather than adding its dependencies to either current
-module. That keeps TUI builds free of Gio and its Linux native requirements. A
-nested module whose path remains below `github.com/uija/eqdps` can consume the
-shared `internal` packages.
+Both frontends are nested modules. This keeps tview/tcell out of GUI builds and
+keeps Gio and its Linux native requirements out of TUI builds. Their module
+paths remain below `github.com/uija/eqdps`, allowing both to consume the shared
+`internal` packages.
 
 Plane of Sky quest tracking is independent of combat replay. Once enabled, it
 maintains `CHARACTER_SERVER_PoS.json` beside the selected logfile and resumes
-from an exact byte offset. A missing state file opens an opt-in TUI prompt for a
-one-time full-log scan. Choosing `Not Now` or cancelling creates no state and
-asks again next launch. Text mode does not initiate the first scan.
+from an exact byte offset. A missing state file opens an opt-in prompt in either
+interactive frontend for a one-time full-log scan. Choosing `Not Now` or
+cancelling creates no state and asks again next launch. Text mode does not
+initiate the first scan.
 
 Replay mode scans the file from a cutoff, uses log timestamps for idle endings,
 then live tailing still opens at the current EOF. `--since` takes precedence over
@@ -411,15 +411,19 @@ replaces it atomically, and replay errors remain visible in the modal.
 ```bash
 go test ./...
 go test ./tui/...
+go test ./gui/...
 go vet ./...
 go vet ./tui/...
+go vet ./gui/...
 go build -o /tmp/eqdps-check ./tui
+go build -o /tmp/eqdps-gui-check ./gui
 git diff --check
 ```
 
 7. For parser work, run the full-corpus audit in `docs/PARSER_RECHECK.md`.
-8. For UI work, exercise the TUI in a real terminal, especially overlay focus,
-   narrow widths, scrolling, collapsed summaries, and expanded combatant rows.
+8. For UI work, exercise the TUI in a real terminal and the GUI on a real
+   desktop. Check focus, narrow sizes, scrolling, collapsed summaries, expanded
+   combatant rows, overlay stacking, and minimized-main-window updates.
 
 Do not leave a generated `eqdps` binary in the repository root after checks.
 
