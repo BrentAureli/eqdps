@@ -100,6 +100,13 @@ Windows testers can download the manually generated GUI executable from the
 This is an early testing release, so reports from different Windows systems are
 welcome.
 
+The Windows executable is not currently code-signed. Microsoft Defender
+SmartScreen may therefore show an **Unknown publisher** warning, especially
+while the release has little download reputation. Download Windows builds only
+from the official GitHub release page linked above. This warning alone does not
+mean that Defender detected malware; it indicates that Windows cannot verify a
+trusted publisher signature.
+
 ### Fedora Build Dependencies
 
 Install Go and the libraries required to compile Gio:
