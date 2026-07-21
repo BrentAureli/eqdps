@@ -5,9 +5,20 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 const maxRecentLogs = 8
+
+type guiDefaults struct {
+	mainFontScale  float32
+	dpsFontScale   float32
+	fontMultiplier float32
+	mainWidth      int
+	mainHeight     int
+	overlayWidth   int
+	overlayHeight  int
+}
 
 type guiSettings struct {
 	LastLogfile    string   `json:"last_logfile,omitempty"`
@@ -22,20 +33,59 @@ type guiSettings struct {
 	MainHeight     int      `json:"main_height,omitempty"`
 	OverlayWidth   int      `json:"overlay_width,omitempty"`
 	OverlayHeight  int      `json:"overlay_height,omitempty"`
+	OverlayX       int      `json:"overlay_x,omitempty"`
+	OverlayY       int      `json:"overlay_y,omitempty"`
+	OverlayPlaced  bool     `json:"overlay_placed,omitempty"`
 }
 
 func (settings *guiSettings) normalize() {
-	settings.MainFontScale = clampSetting(settings.MainFontScale, .75, 1.5, 1)
-	settings.DPSFontScale = clampSetting(settings.DPSFontScale, .5, 1.5, 1)
+	settings.normalizeForGOOS(runtime.GOOS)
+}
+
+func (settings *guiSettings) normalizeForGOOS(goos string) {
+	defaults := settingsDefaultsForGOOS(goos)
+	settings.MainFontScale = clampSetting(settings.MainFontScale, .75, 1.5, defaults.mainFontScale)
+	settings.DPSFontScale = clampSetting(settings.DPSFontScale, .5, 1.5, defaults.dpsFontScale)
 	settings.DPSOpacity = clampSetting(settings.DPSOpacity, .35, 1, .8)
 	if settings.IdleTimeoutSec == 0 {
 		settings.IdleTimeoutSec = 15
 	}
 	settings.IdleTimeoutSec = min(max(settings.IdleTimeoutSec, 5), 60)
-	settings.MainWidth = normalizedWindowSize(settings.MainWidth, 1050, 720)
-	settings.MainHeight = normalizedWindowSize(settings.MainHeight, 700, 460)
-	settings.OverlayWidth = normalizedWindowSize(settings.OverlayWidth, 520, 380)
-	settings.OverlayHeight = normalizedWindowSize(settings.OverlayHeight, 310, 180)
+	settings.MainWidth = normalizedWindowSize(settings.MainWidth, defaults.mainWidth, 720)
+	settings.MainHeight = normalizedWindowSize(settings.MainHeight, defaults.mainHeight, 460)
+	settings.OverlayWidth = normalizedWindowSize(settings.OverlayWidth, defaults.overlayWidth, 380)
+	settings.OverlayHeight = normalizedWindowSize(settings.OverlayHeight, defaults.overlayHeight, 180)
+}
+
+func settingsDefaultsForGOOS(goos string) guiDefaults {
+	if goos == "windows" {
+		return guiDefaults{
+			mainFontScale:  .85,
+			dpsFontScale:   .8,
+			fontMultiplier: .75,
+			mainWidth:      1050,
+			mainHeight:     700,
+			overlayWidth:   430,
+			overlayHeight:  240,
+		}
+	}
+	return guiDefaults{
+		mainFontScale:  1,
+		dpsFontScale:   1,
+		fontMultiplier: 1,
+		mainWidth:      1050,
+		mainHeight:     700,
+		overlayWidth:   520,
+		overlayHeight:  310,
+	}
+}
+
+func effectiveFontScale(scale float32) float32 {
+	return effectiveFontScaleForGOOS(runtime.GOOS, scale)
+}
+
+func effectiveFontScaleForGOOS(goos string, scale float32) float32 {
+	return scale * settingsDefaultsForGOOS(goos).fontMultiplier
 }
 
 func normalizedWindowSize(value, fallback, minimum int) int {
@@ -112,10 +162,29 @@ func saveSettings(settings guiSettings) error {
 		temporary.Close()
 		return err
 	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, path)
+	if err := replaceFile(temporaryPath, path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func replaceFile(source, destination string) error {
+	if err := os.Rename(source, destination); err != nil {
+		if removeErr := os.Remove(destination); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return err
+		}
+		if renameErr := os.Rename(source, destination); renameErr != nil {
+			return renameErr
+		}
+	}
+	return nil
 }
 
 func (settings *guiSettings) rememberLog(path string) {

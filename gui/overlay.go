@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"gioui.org/app"
@@ -35,6 +36,16 @@ type combatOverlay struct {
 	completedAt      time.Time
 	lastWidth        int
 	lastHeight       int
+	lastX            int
+	lastY            int
+	nativeMu         sync.Mutex
+	nativeHandle     uintptr
+	nativeOpacity    float32
+	positionKnown    bool
+	positionRestored bool
+	savedX           int
+	savedY           int
+	hasSavedPosition bool
 	focusOrder       uint64
 	focusCandidate   uint64
 	focusCandidateAt time.Time
@@ -70,12 +81,16 @@ func (s *shell) openOverlay() {
 	theme.Palette.Fg = palette.text
 	theme.Palette.Bg = palette.window
 	overlay := &combatOverlay{
-		window:  window,
-		theme:   theme,
-		updates: make(chan overlayUpdate, 1),
-		closed:  s.overlayClosed,
-		owner:   s.window,
-		list:    widget.List{List: layout.List{Axis: layout.Vertical}},
+		window:           window,
+		theme:            theme,
+		updates:          make(chan overlayUpdate, 1),
+		closed:           s.overlayClosed,
+		owner:            s.window,
+		list:             widget.List{List: layout.List{Axis: layout.Vertical}},
+		savedX:           s.settings.OverlayX,
+		savedY:           s.settings.OverlayY,
+		nativeOpacity:    s.settings.DPSOpacity,
+		hasSavedPosition: s.settings.OverlayPlaced,
 	}
 	s.overlay = overlay
 	s.overlayMu.Unlock()
@@ -85,6 +100,15 @@ func (s *shell) openOverlay() {
 			log.Printf("DPS overlay: %v", err)
 		}
 	}()
+}
+
+func (s *shell) applyOverlayOpacity(opacity float32) {
+	s.overlayMu.RLock()
+	overlay := s.overlay
+	s.overlayMu.RUnlock()
+	if overlay != nil {
+		setNativeOverlayOpacity(overlay, opacity)
+	}
 }
 
 func (s *shell) toggleOverlay() {
@@ -162,8 +186,11 @@ func (o *combatOverlay) run() error {
 		o.owner.Invalidate()
 	}()
 	for {
-		switch event := o.window.Event().(type) {
+		event := o.window.Event()
+		handleNativeOverlayEvent(o, event)
+		switch event := event.(type) {
 		case app.DestroyEvent:
+			captureNativeOverlayPosition(o)
 			return event.Err
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, event)

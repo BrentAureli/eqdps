@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"time"
 
 	"gioui.org/font"
@@ -48,8 +47,8 @@ func (s *shell) layoutPreferences(gtx layout.Context) layout.Dimensions {
 		}),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			message := "Opacity is stored, but this platform requires compositor configuration. See Help → Wayland overlay setup."
-			if runtime.GOOS == "windows" {
-				message = "Windows-native opacity support is the next implementation step."
+			if nativeOpacityAvailable() {
+				message = "Opacity is applied immediately to the DPS overlay."
 			}
 			return inset(0, unit.Dp(14)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 				return label(gtx, s.theme, message, unit.Sp(14), palette.muted, text.Start)
@@ -94,15 +93,19 @@ func (s *shell) applyPreferenceValues() {
 	dpsScale := sliderToSetting(s.dpsScale.Value, .5, 1.5)
 	opacity := sliderToSetting(s.dpsOpacity.Value, .35, 1)
 	idleTimeout := int(sliderToSetting(s.idleTimeoutSlider.Value, 5, 60) + .5)
+	opacityChanged := opacity != s.settings.DPSOpacity
 	if mainScale != s.settings.MainFontScale || dpsScale != s.settings.DPSFontScale || opacity != s.settings.DPSOpacity || idleTimeout != s.settings.IdleTimeoutSec {
 		s.settings.MainFontScale = mainScale
 		s.settings.DPSFontScale = dpsScale
-		s.dpsFontMilli.Store(int64(dpsScale*1000 + .5))
+		s.dpsFontMilli.Store(int64(effectiveFontScale(dpsScale)*1000 + .5))
 		s.settings.DPSOpacity = opacity
 		s.settings.IdleTimeoutSec = idleTimeout
 		s.combatIdleNanos.Store(int64(time.Duration(idleTimeout) * time.Second))
-		s.theme.TextSize = unit.Sp(16 * mainScale)
+		s.theme.TextSize = unit.Sp(16 * effectiveFontScale(mainScale))
 		s.pushOverlay(s.fights)
+		if opacityChanged {
+			s.applyOverlayOpacity(opacity)
+		}
 		s.prefsDirty = true
 	}
 	if s.prefsDirty && !s.mainScale.Dragging() && !s.dpsScale.Dragging() && !s.dpsOpacity.Dragging() {
@@ -111,8 +114,4 @@ func (s *shell) applyPreferenceValues() {
 			s.statusText = "Preferences could not be saved"
 		}
 	}
-}
-
-func nativeOpacityAvailable() bool {
-	return false
 }

@@ -207,6 +207,7 @@ func run(window *app.Window) error {
 		switch event := window.Event().(type) {
 		case app.DestroyEvent:
 			ui.captureMainSize(ui.lastMainWidth, ui.lastMainHeight)
+			ui.captureOpenOverlaySettings()
 			_ = saveSettings(ui.settings)
 			return event.Err
 		case app.FrameEvent:
@@ -219,6 +220,16 @@ func run(window *app.Window) error {
 	}
 }
 
+func (s *shell) captureOpenOverlaySettings() {
+	s.overlayMu.RLock()
+	overlay := s.overlay
+	s.overlayMu.RUnlock()
+	if overlay == nil {
+		return
+	}
+	s.captureOverlaySettingsLocked(overlay)
+}
+
 func newShell(window *app.Window) *shell {
 	theme := material.NewTheme()
 	theme.Palette.Fg = palette.text
@@ -226,7 +237,7 @@ func newShell(window *app.Window) *shell {
 	settings, settingsErr := loadSettings()
 	skyDatabase, skyDatabaseErr := skyquest.LoadDatabase()
 	settings.normalize()
-	theme.TextSize = unit.Sp(16 * settings.MainFontScale)
+	theme.TextSize = unit.Sp(16 * effectiveFontScale(settings.MainFontScale))
 	statusText := "No logfile selected"
 	currentLog := ""
 	if settingsErr != nil {
@@ -274,7 +285,7 @@ func newShell(window *app.Window) *shell {
 	result.dpsOpacity.Value = settingToSlider(settings.DPSOpacity, .35, 1)
 	result.idleTimeoutSlider.Value = settingToSlider(float32(settings.IdleTimeoutSec), 5, 60)
 	result.combatIdleNanos.Store(int64(time.Duration(settings.IdleTimeoutSec) * time.Second))
-	result.dpsFontMilli.Store(int64(settings.DPSFontScale*1000 + .5))
+	result.dpsFontMilli.Store(int64(effectiveFontScale(settings.DPSFontScale)*1000 + .5))
 	if skyDatabaseErr != nil {
 		result.skyMessage = skyDatabaseErr.Error()
 	} else {
@@ -349,10 +360,7 @@ func (s *shell) update(gtx layout.Context) {
 	case closed := <-s.overlayClosed:
 		s.overlayMu.Lock()
 		if s.overlay == closed {
-			if closed.lastWidth >= 380 && closed.lastHeight >= 180 {
-				s.settings.OverlayWidth = closed.lastWidth
-				s.settings.OverlayHeight = closed.lastHeight
-			}
+			s.captureOverlaySettingsLocked(closed)
 			s.overlay = nil
 			s.setOverlayVisible(false)
 		}
@@ -458,6 +466,19 @@ func (s *shell) update(gtx layout.Context) {
 				}
 			}
 		}
+	}
+}
+
+func (s *shell) captureOverlaySettingsLocked(overlay *combatOverlay) {
+	captureNativeOverlayPosition(overlay)
+	if overlay.lastWidth >= 380 && overlay.lastHeight >= 180 {
+		s.settings.OverlayWidth = overlay.lastWidth
+		s.settings.OverlayHeight = overlay.lastHeight
+	}
+	if overlay.positionKnown {
+		s.settings.OverlayX = overlay.lastX
+		s.settings.OverlayY = overlay.lastY
+		s.settings.OverlayPlaced = true
 	}
 }
 
