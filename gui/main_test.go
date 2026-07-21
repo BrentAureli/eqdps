@@ -29,3 +29,28 @@ func TestCancelSkyOperation(t *testing.T) {
 		t.Fatal("Plane of Sky cancellation channel was not closed")
 	}
 }
+
+func TestSetSubtreeExpanded(t *testing.T) {
+	shell := shell{
+		expanded: map[string]bool{},
+		treeChildren: map[string][]string{
+			"combatant": {"melee", "magic"},
+			"melee":     {"slashes"},
+		},
+	}
+
+	shell.setSubtreeExpanded("combatant", true)
+	for _, key := range []string{"combatant", "melee", "magic", "slashes"} {
+		if !shell.expanded[key] {
+			t.Errorf("expected %q to be expanded", key)
+		}
+	}
+
+	shell.setSubtreeExpanded("melee", false)
+	if shell.expanded["melee"] || shell.expanded["slashes"] {
+		t.Fatal("collapsing a category did not collapse its descendants")
+	}
+	if !shell.expanded["combatant"] || !shell.expanded["magic"] {
+		t.Fatal("collapsing a category changed nodes outside its subtree")
+	}
+}

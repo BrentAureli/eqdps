@@ -52,6 +52,7 @@ type shell struct {
 	activeMenu        int
 	activeSub         int
 	treeClicks        map[string]*widget.Clickable
+	treeChildren      map[string][]string
 	expanded          map[string]bool
 	window            *app.Window
 	settings          guiSettings
@@ -269,6 +270,7 @@ func newShell(window *app.Window) *shell {
 		skyList:       widget.List{List: layout.List{Axis: layout.Vertical}},
 		skyUpdates:    make(chan skyAsyncUpdate, 1),
 		treeClicks:    make(map[string]*widget.Clickable),
+		treeChildren:  make(map[string][]string),
 		expanded:      make(map[string]bool),
 		menus: []menu{
 			{name: "File", items: []menuItem{{name: "Open logfile", detail: "Choose a file and initial history", enabled: true, items: ranges}, {name: "Recent logfiles", enabled: len(recents) > 0, items: recents}, {name: "Exit", enabled: true, action: "exit"}}},
@@ -442,7 +444,7 @@ func (s *shell) update(gtx layout.Context) {
 	}
 	for key, click := range s.treeClicks {
 		if click.Clicked(gtx) {
-			s.expanded[key] = !s.expanded[key]
+			s.setSubtreeExpanded(key, !s.expanded[key])
 		}
 	}
 	if s.activeMenu >= 0 && s.activeMenu < len(s.menus) {
@@ -855,6 +857,7 @@ func (s *shell) layoutCombatRows(gtx layout.Context, fightIndex int, combatants 
 	for index, combatant := range combatants {
 		index, combatant := index, combatant
 		key := fmt.Sprintf("fight:%d:%s", fightIndex, combatant.name)
+		s.registerBreakdownTree(key, combatant.details)
 		children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			if len(combatant.details) == 0 {
 				return s.layoutCombatRow(gtx, combatant, false, index%2 == 1)
@@ -868,6 +871,26 @@ func (s *shell) layoutCombatRows(gtx layout.Context, fightIndex int, combatants 
 		}
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, children...)
+}
+
+func (s *shell) registerBreakdownTree(parent string, details []fakeBreakdown) {
+	children := make([]string, 0, len(details))
+	for _, detail := range details {
+		if len(detail.children) == 0 {
+			continue
+		}
+		key := parent + ":detail:" + detail.name
+		children = append(children, key)
+		s.registerBreakdownTree(key, detail.children)
+	}
+	s.treeChildren[parent] = children
+}
+
+func (s *shell) setSubtreeExpanded(key string, expanded bool) {
+	s.expanded[key] = expanded
+	for _, child := range s.treeChildren[key] {
+		s.setSubtreeExpanded(child, expanded)
+	}
 }
 
 func (s *shell) layoutBreakdowns(gtx layout.Context, parent string, details []fakeBreakdown, level int) layout.Dimensions {
