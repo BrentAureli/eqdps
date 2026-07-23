@@ -64,3 +64,9 @@ func TestSkyRequirementSourceUsesSpecificDrop(t *testing.T) {
 		t.Fatalf("unexpected source: %q", got)
 	}
 }
+
+func TestSkyRewardURL(t *testing.T) {
+	if got := skyRewardURL("Mask of Song"); got != "https://eqlwiki.com/Mask_of_Song" {
+		t.Fatalf("unexpected reward URL: %q", got)
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"image"
 	"image/color"
 	"net/url"
-	"os/exec"
 	"strings"
 
 	"gioui.org/font"
@@ -98,13 +97,13 @@ func (s *shell) skyQuestRows(progress skyquest.QuestProgress, readySummary bool)
 	}
 
 	rows := []skyRow{{
-		kind:       "quest",
-		name:       name,
-		status:     status,
-		detail:     progress.Quest.QuestGiver + " — Reward: " + reward,
-		reward:     reward,
+		kind:        "quest",
+		name:        name,
+		status:      status,
+		detail:      progress.Quest.QuestGiver + " — Reward: " + reward,
+		reward:      reward,
 		rewardClick: &widget.Clickable{},
-		foreground: foreground,
+		foreground:  foreground,
 	}}
 	for _, requirement := range progress.Quest.Requirements {
 		owned := s.skyInventory[requirement.Name]
@@ -227,8 +226,9 @@ func (s *shell) layoutSkyRow(gtx layout.Context, row skyRow, header bool) layout
 					if row.kind == "quest" && row.reward != "" {
 
 						for row.rewardClick != nil && row.rewardClick.Clicked(gtx) {
-							link := "https://eqlwiki.com/" + url.PathEscape(strings.ReplaceAll(row.reward, " ", "_"))
-							openURL(link)
+							if err := openExternalURL(skyRewardURL(row.reward)); err != nil {
+								s.statusText = "Could not open reward link: " + err.Error()
+							}
 						}
 
 						return row.rewardClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
@@ -298,6 +298,6 @@ func skyRequirementSource(requirement skyquest.Requirement) string {
 	return "Plane of Sky"
 }
 
-func openURL(url string) {
-	_ = exec.Command("xdg-open", url).Start()
+func skyRewardURL(reward string) string {
+	return "https://eqlwiki.com/" + url.PathEscape(strings.ReplaceAll(reward, " ", "_"))
 }
