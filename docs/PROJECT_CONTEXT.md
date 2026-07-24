@@ -19,16 +19,15 @@ plain-text mode for parser comparisons.
 
 ## Current Status
 
-The frontend separation plus the initial Linux and Windows GUI passes are
-complete on branch `refactor/frontend-separation`. Native Windows overlay
-opacity and position restoration, repeated settings saves, Windows defaults,
-and embedded icons are implemented. The GUI ran stably during direct Windows
-11 testing, and a manually generated executable is available in the GitHub
-`v0.1.0` release for wider testing.
+The frontend separation, Linux and Windows GUI passes, Plane of Sky tracker,
+and EQLDB connected inventory uploads are merged into `main`. Native Windows
+overlay opacity and position restoration, repeated settings saves, Windows
+defaults, and embedded icons are implemented. The current tagged release is
+`v0.1.3`.
 
 Read [`WINDOWS_HANDOFF.md`](WINDOWS_HANDOFF.md) before changing native window
-code. Packaging, version metadata, automated releases, and broader volunteer
-feedback remain future work.
+code. Read [`EVENTS_INTEGRATION.md`](EVENTS_INTEGRATION.md) before starting the
+planned integration of the standalone `eqlogevents` prototype.
 
 The primary sample corpus is `eqlog_Wyrmberg_rivervale.txt`. It is large and is
 intentionally not duplicated under `docs/`.
@@ -60,6 +59,7 @@ intentionally not duplicated under `docs/`.
 | `docs/GUI_ROADMAP.md` | Graphical frontend status and remaining release work |
 | `docs/WINDOWS_HANDOFF.md` | Windows 11 implementation and native-behavior checklist |
 | `docs/PARSER_RECHECK.md` | Full-corpus parser quality audit procedure |
+| `docs/EVENTS_INTEGRATION.md` | Planned integration of configurable sounds and desktop notifications |
 
 ## Runtime Data Flow
 
@@ -415,12 +415,6 @@ matching `/who` result exists.
 Authentication state is stored in `eqdps/eqldb.json` below
 `os.UserConfigDir()`, independently of the frontend. The access token is written
 with owner-only permissions where the operating system supports Unix modes.
-The GUI currently includes a clearly marked temporary simulator under its
-connected-management dialog. It appends a current `/who` result and
-`Outputfile Complete` entry to the followed log so the integration can be
-tested while EverQuest Legends is offline. Remove it after the GUI upload path
-has been verified.
-
 The connected-application client uses the production endpoint
 `https://eqldb.org`. Tests replace the client base URL with an isolated local
 HTTP test server.

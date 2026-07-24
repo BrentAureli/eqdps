@@ -462,6 +462,7 @@ Project documentation:
 - [Windows 11 GUI handoff](docs/WINDOWS_HANDOFF.md)
 - [Parser recheck guide](docs/PARSER_RECHECK.md)
 - [Project context and engineering handoff](docs/PROJECT_CONTEXT.md)
+- [Events integration handoff](docs/EVENTS_INTEGRATION.md)
 - [EQLDB connected-application API](docs/CONNECTED_APPLICATION_API.md)
 - [`/who` classes and races](docs/WHO_METADATA.md)
 
