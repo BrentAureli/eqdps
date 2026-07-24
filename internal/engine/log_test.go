@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/uija/eqdps/internal/combat"
+	"github.com/uija/eqdps/internal/event"
 	"github.com/uija/eqdps/internal/xp"
 )
 
@@ -89,5 +90,38 @@ func TestFollowWithPollInvokesIdleCallbackAtEOF(t *testing.T) {
 	}
 	if !polled {
 		t.Fatal("expected EOF poll callback")
+	}
+}
+
+func TestReplayDoesNotDispatchLiveLineEvents(t *testing.T) {
+	line := "[Mon Jul 13 16:46:49 2026] Your speed returns to normal.\n"
+	path := filepath.Join(t.TempDir(), "eqlog_Test_server.txt")
+	if err := os.WriteFile(path, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dispatcher, err := event.NewDispatcher([]event.Event{{
+		ID: "fade", Title: "Fade", Active: true, TriggerType: event.TriggerText,
+		Pattern: "speed returns", Notification: "Buff faded",
+	}}, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Replay(path, combat.DefaultIdleTimeout, -time.Nanosecond, time.Time{}, 0); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case delivery := <-dispatcher.Notifications():
+		t.Fatalf("replay dispatched event %#v", delivery)
+	default:
+	}
+
+	DispatchLiveLine(line, dispatcher)
+	select {
+	case delivery := <-dispatcher.Notifications():
+		if delivery.Event.ID != "fade" {
+			t.Fatalf("unexpected delivery %#v", delivery)
+		}
+	default:
+		t.Fatal("live line did not dispatch event")
 	}
 }

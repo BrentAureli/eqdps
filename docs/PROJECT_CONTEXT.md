@@ -20,14 +20,15 @@ plain-text mode for parser comparisons.
 ## Current Status
 
 The frontend separation, Linux and Windows GUI passes, Plane of Sky tracker,
-and EQLDB connected inventory uploads are merged into `main`. Native Windows
-overlay opacity and position restoration, repeated settings saves, Windows
-defaults, and embedded icons are implemented. The current tagged release is
-`v0.1.3`.
+EQLDB connected inventory uploads, and configurable live-line events are
+implemented. Native Windows overlay opacity and position restoration, repeated
+settings saves, Windows defaults, and embedded icons are implemented. The
+current tagged release is `v0.1.3`.
 
 Read [`WINDOWS_HANDOFF.md`](WINDOWS_HANDOFF.md) before changing native window
-code. Read [`EVENTS_INTEGRATION.md`](EVENTS_INTEGRATION.md) before starting the
-planned integration of the standalone `eqlogevents` prototype.
+code. [`EVENTS_INTEGRATION.md`](EVENTS_INTEGRATION.md) records the design and
+remaining real-platform release checks for the integrated `eqlogevents`
+features.
 
 The primary sample corpus is `eqlog_Wyrmberg_rivervale.txt`. It is large and is
 intentionally not duplicated under `docs/`.
@@ -45,6 +46,13 @@ intentionally not duplicated under `docs/`.
 | `go.work` | Local workspace connecting the shared, TUI, and GUI modules |
 | `internal/eqlog/parser.go` | Unified log records plus damage, cast, XP, aggro, and death parsing |
 | `internal/engine/log.go` | UI-independent logfile replay, live tailing, and combat/XP record dispatch |
+| `internal/event` | Event definitions, validation, compiled matching, and non-blocking dispatch queues |
+| `internal/eventruntime` | Shared sound and desktop-notification workers |
+| `internal/eventstore` | Shared atomic event/settings persistence and audio/icon directories |
+| `internal/audio` | Embedded/user sound discovery, decoding, caching, and Oto playback |
+| `internal/notify` | Cross-platform desktop delivery through beeep |
+| `internal/catalog` | Embedded EverQuest spell catalogue |
+| `internal/spellicon` | EverQuest installation detection and spell-icon extraction |
 | `internal/eqlog/parser_test.go` | Exact production log format regressions |
 | `internal/combat/combat.go` | Stats, pet merging, per-mob lifecycle, history |
 | `internal/combat/combat_test.go` | Meter and per-mob state behavior |
@@ -55,11 +63,13 @@ intentionally not duplicated under `docs/`.
 | `internal/skyquest/tracker.go` | Zone-aware quest holdings and ready-quest calculation |
 | `internal/skyquest/persistence.go` | Character state, initial scan, and byte-offset checkpoints |
 | `tools/skyquestdb/main.go` | Regenerates the embedded database from EQL Wiki |
+| `tools/logtest/main.go` | Appends synthetic text or spell-fade lines to an explicit test logfile |
+| `tools/spellcatalog/main.go` | Regenerates the embedded spell catalogue from EverQuest data files |
 | `README.md` | User-facing installation and usage |
 | `docs/GUI_ROADMAP.md` | Graphical frontend status and remaining release work |
 | `docs/WINDOWS_HANDOFF.md` | Windows 11 implementation and native-behavior checklist |
 | `docs/PARSER_RECHECK.md` | Full-corpus parser quality audit procedure |
-| `docs/EVENTS_INTEGRATION.md` | Planned integration of configurable sounds and desktop notifications |
+| `docs/EVENTS_INTEGRATION.md` | Events design decisions, implementation status, and release checks |
 
 ## Runtime Data Flow
 
@@ -70,6 +80,12 @@ log line
   -> combat.FightTracker / xp.Session
   -> combat.Meter / XP snapshot
   -> text, tview, or Gio presentation
+
+new live line only
+  -> existing combat / XP / Sky / EQLDB processing
+  -> configured event matching
+       -> sound queue
+       -> desktop-notification queue
 ```
 
 Live mode opens the file and seeks to EOF, so invocation without replay flags
@@ -141,11 +157,18 @@ Hotkeys:
 | --- | --- |
 | `o` | History overlay: Now, 1h, 4h, 8h, 1d, Full |
 | `p` | Plane of Sky quest tracker |
+| `n` | Configurable Events page |
 | `/` | Filter displayed fights by case-insensitive mob-name substring |
 | `Enter` | Expand/collapse a mob, combatant, or detail category |
 | `a` | Fully expand or collapse the selected subtree |
 | `r` | Clear the combat tracker and session XP meter |
 | `q` or `Esc` | Quit |
+
+The Events page scopes `a`, `Enter`, `d`, `s`, `t`, `r`, and `v` to event
+editing and notification-sound volume, so combat reset remains `r` on the DPS
+screen. Both frontends share the persisted master sound volume. Event matching
+is called only after the TUI's Sky catch-up boundary. Replay, Sky scanning, and
+catch-up never dispatch events.
 
 When the history overlay is open, it owns input. `Enter` selects its button and
 `Esc` closes only the overlay. The filter input also owns input; `Enter` applies

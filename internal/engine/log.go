@@ -23,6 +23,10 @@ type ReplayProgress struct {
 	Lines int
 }
 
+type LiveLineObserver interface {
+	ObserveLiveLine(string)
+}
+
 var ErrReplayCancelled = errors.New("replay cancelled")
 
 func Replay(logPath string, idleTimeout, back time.Duration, since time.Time, historyLimit int) (*combat.FightTracker, *xp.Session, error) {
@@ -161,6 +165,17 @@ func ProcessRecord(record eqlog.Record, tracker *combat.FightTracker, xpSession 
 		tracker.ForgetEnemies(record.Time)
 	case eqlog.RecordDeath:
 		tracker.AddDeath(record.Death)
+	}
+}
+
+// DispatchLiveLine forwards a genuinely new logfile line to optional live-only
+// consumers after combat, XP, Sky, and connected-application processing have
+// completed. Replay and catch-up paths deliberately do not call this helper.
+func DispatchLiveLine(line string, observers ...LiveLineObserver) {
+	for _, observer := range observers {
+		if observer != nil {
+			observer.ObserveLiveLine(line)
+		}
 	}
 }
 

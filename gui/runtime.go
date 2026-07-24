@@ -75,6 +75,7 @@ func (s *shell) loadLog(path string, back time.Duration) {
 				}
 			}
 			s.processSkyLine(path, line, endOffset)
+			engine.DispatchLiveLine(line, s.eventRuntime)
 			xpSnapshot := xpSession.SnapshotLive(time.Now())
 			s.sendCombatUpdate(combatUpdate{fights: snapshotFights(tracker), status: filepathBase(path) + " · live", xp: &xpSnapshot, state: "live"})
 		}, func(now time.Time) {

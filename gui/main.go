@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -25,6 +26,8 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"github.com/ncruces/zenity"
+	"github.com/uija/eqdps/internal/eventruntime"
+	"github.com/uija/eqdps/internal/eventstore"
 	"github.com/uija/eqdps/internal/skyquest"
 	"github.com/uija/eqdps/internal/xp"
 )
@@ -118,6 +121,11 @@ type shell struct {
 	skyLoadLines      int
 	skyLoadTitle      string
 	eqldb             *eqldbGUI
+	eventRuntime      *eventruntime.Runtime
+	eventStore        *eventstore.Store
+	eventUI           *eventsGUI
+	eventsCancel      context.CancelFunc
+	eventErrors       chan error
 	fights            []fakeFightSection
 	menus             []menu
 	rail              []railItem
@@ -208,6 +216,9 @@ func run(window *app.Window) error {
 	for {
 		switch event := window.Event().(type) {
 		case app.DestroyEvent:
+			if ui.eventsCancel != nil {
+				ui.eventsCancel()
+			}
 			if ui.eqldb != nil {
 				ui.eqldb.Close()
 			}
@@ -276,14 +287,15 @@ func newShell(window *app.Window) *shell {
 		treeClicks:    make(map[string]*widget.Clickable),
 		treeChildren:  make(map[string][]string),
 		expanded:      make(map[string]bool),
+		eventErrors:   make(chan error, 8),
 		menus: []menu{
 			{name: "File", items: []menuItem{{name: "Open logfile", detail: "Choose a file and initial history", enabled: true, items: ranges}, {name: "Recent logfiles", enabled: len(recents) > 0, items: recents}, {name: "Exit", enabled: true, action: "exit"}}},
 			{name: "Combat", items: []menuItem{{name: "Current fight", enabled: true, action: "current"}, {name: "Load history", enabled: currentLog != "", items: historyRangeItems("reload")}, {name: "Filter…", enabled: true, action: "filter"}, {name: "Reset session", enabled: currentLog != "", action: "reset"}}},
-			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true, action: "damage"}, {name: "Plane of Sky", enabled: true, action: "sky"}, {name: "Show DPS overlay", detail: "Toggle compact current-fight window", enabled: true, action: "overlay"}}},
+			{name: "View", items: []menuItem{{name: "Damage meter", enabled: true, action: "damage"}, {name: "Plane of Sky", enabled: true, action: "sky"}, {name: "Events", enabled: true, action: "events"}, {name: "Show DPS overlay", detail: "Toggle compact current-fight window", enabled: true, action: "overlay"}}},
 			{name: "Tools", items: []menuItem{{name: "Preferences…", enabled: true, action: "preferences"}, {name: "EQLDB connection…", enabled: true, action: "eqldb"}}},
 			{name: "Help", items: []menuItem{{name: "Wayland overlay setup…", enabled: true, action: "wayland-help"}, {name: "About eqdps", enabled: true, action: "about"}}},
 		},
-		rail: []railItem{{short: "DPS", name: "Combat Log"}, {short: "SKY", name: "Plane of Sky"}, {short: "SET", name: "Settings"}},
+		rail: eventRailItems(),
 	}
 	result.filterEditor.SingleLine = true
 	result.mainScale.Value = settingToSlider(settings.MainFontScale, .75, 1.5)
@@ -298,11 +310,31 @@ func newShell(window *app.Window) *shell {
 		result.loadSkyState(currentLog)
 	}
 	result.eqldb = newEQLDBGUI(window, currentLog)
+	eventsRuntime, eventsStore, eventsErr := eventruntime.Open(func(err error) {
+		select {
+		case result.eventErrors <- err:
+		default:
+		}
+		window.Invalidate()
+	})
+	if eventsErr != nil {
+		result.statusText = "Events integration unavailable: " + eventsErr.Error()
+	} else {
+		eventContext, cancelEvents := context.WithCancel(context.Background())
+		result.eventRuntime = eventsRuntime
+		result.eventStore = eventsStore
+		result.eventsCancel = cancelEvents
+		eventsRuntime.Start(eventContext)
+		result.eventUI, eventsErr = newEventsGUI(window, eventsStore, eventsRuntime, currentLog)
+		if eventsErr != nil {
+			result.statusText = "Events UI unavailable: " + eventsErr.Error()
+		}
+	}
 	if currentLog != "" {
 		result.loadLog(currentLog, 0)
 	}
 	if settings.OverlayVisible {
-		result.menus[2].items[2].name = "Hide DPS overlay"
+		result.menus[2].items[3].name = "Hide DPS overlay"
 		if result.showWaylandHelpOnce() {
 			result.openAfterHelp = true
 		} else {
@@ -310,6 +342,15 @@ func newShell(window *app.Window) *shell {
 		}
 	}
 	return result
+}
+
+func eventRailItems() []railItem {
+	return []railItem{
+		{short: "DPS", name: "Combat Log"},
+		{short: "SKY", name: "Plane of Sky"},
+		{short: "EVENTS", name: "Events"},
+		{short: "SET", name: "Settings"},
+	}
 }
 
 func (s *shell) layout(gtx layout.Context) layout.Dimensions {
@@ -334,6 +375,9 @@ func (s *shell) layout(gtx layout.Context) layout.Dimensions {
 }
 
 func (s *shell) update(gtx layout.Context) {
+	if s.eventUI != nil {
+		s.eventUI.Update(gtx)
+	}
 	if s.eqldb != nil {
 		s.eqldb.Update(gtx, s)
 	}
@@ -420,6 +464,11 @@ func (s *shell) update(gtx layout.Context) {
 		s.applySkyAsyncUpdate(update)
 	default:
 	}
+	select {
+	case err := <-s.eventErrors:
+		s.statusText = "Events: " + err.Error()
+	default:
+	}
 	if s.filterClear.Clicked(gtx) {
 		s.fightFilter = ""
 		s.filterEditor.SetText("")
@@ -448,6 +497,9 @@ func (s *shell) update(gtx layout.Context) {
 	for index := range s.rail {
 		if s.rail[index].click.Clicked(gtx) {
 			s.workspace = index
+			if index == 2 && s.eventUI != nil {
+				s.eventUI.Enter()
+			}
 			s.activeMenu = -1
 		}
 	}
@@ -613,7 +665,7 @@ func (s *shell) activateItem(item menuItem) {
 	case "about":
 		s.aboutOpen = true
 	case "preferences":
-		s.workspace = 2
+		s.workspace = 3
 	case "eqldb":
 		if s.eqldb != nil {
 			s.eqldb.OpenManagement()
@@ -622,6 +674,11 @@ func (s *shell) activateItem(item menuItem) {
 		s.workspace = 0
 	case "sky":
 		s.workspace = 1
+	case "events":
+		s.workspace = 2
+		if s.eventUI != nil {
+			s.eventUI.Enter()
+		}
 	case "current":
 		s.showCurrentFight()
 	case "filter":
@@ -732,6 +789,9 @@ func (s *shell) rememberChosenFile(choice fileChoice) {
 	if s.eqldb != nil {
 		s.eqldb.SetLog(choice.path)
 	}
+	if s.eventUI != nil {
+		s.eventUI.SetLog(choice.path)
+	}
 	s.loadLog(choice.path, choice.back)
 }
 
@@ -802,6 +862,11 @@ func (s *shell) layoutWorkspace(gtx layout.Context) layout.Dimensions {
 	case 1:
 		return s.layoutSkyWorkspace(gtx)
 	case 2:
+		if s.eventUI != nil {
+			return s.eventUI.Layout(gtx, s.theme)
+		}
+		return s.layoutPlaceholder(gtx, "Events unavailable", "The shared event configuration could not be loaded.")
+	case 3:
 		return s.layoutPreferences(gtx)
 	default:
 		return s.layoutDamageMeter(gtx)

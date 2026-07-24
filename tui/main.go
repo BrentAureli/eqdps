@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/uija/eqdps/internal/combat"
 	"github.com/uija/eqdps/internal/engine"
 	"github.com/uija/eqdps/internal/eqlog"
+	"github.com/uija/eqdps/internal/eventruntime"
 	"github.com/uija/eqdps/internal/skyquest"
 	"github.com/uija/eqdps/internal/xp"
 )
@@ -127,6 +129,12 @@ func needsSkyCatchupOverlay(backlog int64, textMode bool) bool {
 
 func isLiveLineAfterCatchup(endOffset, catchupTarget int64) bool {
 	return catchupTarget == 0 || endOffset > catchupTarget
+}
+
+func dispatchEventLineAfterCatchup(line string, endOffset, catchupTarget int64, observer engine.LiveLineObserver) {
+	if isLiveLineAfterCatchup(endOffset, catchupTarget) {
+		engine.DispatchLiveLine(line, observer)
+	}
 }
 
 func parseSince(value string) (time.Time, error) {
@@ -246,6 +254,16 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		noticeColor = color
 		noticeMu.Unlock()
 	}
+	eventErrors := make(chan error, 8)
+	eventsRuntime, eventsStore, eventsInitErr := eventruntime.Open(func(err error) {
+		select {
+		case eventErrors <- err:
+		default:
+		}
+	})
+	if eventsInitErr != nil {
+		setNotice("Events integration unavailable: "+eventsInitErr.Error(), eqldbErrorColor, 12*time.Second)
+	}
 	skyCatchupOpen := skyCatchupTarget > 0
 
 	render := func() {
@@ -318,8 +336,19 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	if eqldbInitErr != nil {
 		setNotice("EQLDB integration unavailable: "+eqldbInitErr.Error(), eqldbErrorColor, 12*time.Second)
 	}
+	var eventsUI *eventsTUI
+	if eventsRuntime != nil && eventsStore != nil {
+		eventsUI, eventsInitErr = newEventsTUI(app, pages, table, eventsStore, eventsRuntime, logPath)
+		if eventsInitErr != nil {
+			setNotice("Events UI unavailable: "+eventsInitErr.Error(), eqldbErrorColor, 12*time.Second)
+		}
+	}
 
 	done := make(chan struct{})
+	eventContext, cancelEvents := context.WithCancel(context.Background())
+	if eventsRuntime != nil {
+		eventsRuntime.Start(eventContext)
+	}
 	skyCatchupDone := make(chan struct{})
 	if skyCatchupTarget == 0 {
 		close(skyCatchupDone)
@@ -328,9 +357,23 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 	var stopOnce sync.Once
 	stop := func() {
 		stopOnce.Do(func() {
+			cancelEvents()
 			close(done)
 		})
 	}
+	go func() {
+		for {
+			select {
+			case err := <-eventErrors:
+				app.QueueUpdateDraw(func() {
+					setNotice("Events: "+err.Error(), eqldbErrorColor, 8*time.Second)
+					render()
+				})
+			case <-done:
+				return
+			}
+		}
+	}()
 	go func() {
 		select {
 		case <-skyCatchupDone:
@@ -380,6 +423,7 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 			if liveLine && parsed && eqldbUI != nil {
 				eqldbUI.Observe(record)
 			}
+			dispatchEventLineAfterCatchup(line, endOffset, skyCatchupTarget, eventsRuntime)
 			app.QueueUpdateDraw(render)
 		}); err != nil {
 			errCh <- err
@@ -771,6 +815,12 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 		if eqldbUI != nil && eqldbUI.ModalOpen() {
 			return event
 		}
+		if eventsUI != nil && eventsUI.Opened() {
+			if eventsUI.HandleGlobal(event) {
+				return nil
+			}
+			return event
+		}
 		if skyCatchupOpen {
 			if event.Key() == tcell.KeyEsc && skyCatchupCancel != nil {
 				close(skyCatchupCancel)
@@ -918,6 +968,11 @@ func runApp(logPath string, idleTimeout, back time.Duration, since time.Time, hi
 				showSkySetup()
 			}
 			return nil
+		case 'n', 'N':
+			if eventsUI != nil {
+				eventsUI.Open()
+			}
+			return nil
 		case 'e', 'E':
 			if eqldbUI != nil {
 				eqldbUI.OpenManagement()
@@ -997,7 +1052,7 @@ func titleText(logPath string, terminalWidth int) string {
 }
 
 func shortcutsText() string {
-	return "[gray]o[::-] history   [gray]p[::-] Sky quests   [gray]e[::-] EQLDB   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] toggle tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
+	return "[gray]o[::-] history   [gray]p[::-] Sky   [gray]n[::-] Events   [gray]e[::-] EQLDB   [gray]/[::-] filter   [gray]Enter[::-] details   [gray]a[::-] tree   [gray]r[::-] reset   [gray]q/Esc[::-] quit"
 }
 
 func xpInfoText(snapshot xp.Snapshot, fightFilter string) string {

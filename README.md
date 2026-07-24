@@ -9,13 +9,19 @@ target.
 It tails an EQ log, tracks every engaged mob independently, and can replay
 recent history to compare parses or investigate combat detection.
 
-`Because I am lazy and wanted to play EverQuest Legends Open Beta, Codex did most of the work.`
+> Because I am lazy and wanted to play the EverQuest Legends Open Beta, Codex
+> did most of the work.
 
 ## Download
 
-You can download the latest precompiled versions of the GUI Version for Windows in the [Release section](https://github.com/uija/eqdps/releases/tag/v0.1.3).
+Windows users can download the prebuilt graphical application directly from
+the [eqdps v0.2.0 release](https://github.com/uija/eqdps/releases/tag/v0.2.0).
 
-Linux users need to build theirself.
+The Windows executables are not currently code-signed. Microsoft Defender
+SmartScreen may therefore display an **Unknown publisher** warning. Download
+builds only from the official release page.
+
+Linux users currently need to [build from source](#building-from-source).
 
 ## Screenshots
 
@@ -24,25 +30,29 @@ application. The screenshots below show the main combat views, the optional
 in-game DPS overlay, and the Plane of Sky quest tracker in both interfaces.
 
 ### Terminal DPS screen
+
 ![eqdps terminal interface](img/Screenshot-2026-07-16_17-11-16.png)
 
-### Plane of Sky tracker
+### Terminal Plane of Sky tracker
+
 ![eqdps Plane of Sky tracker](img/Screenshot-2026-07-16_17-11-41.png)
 
 ### Windowed DPS screen
+
 ![eqdps windowed interface](img/Screenshot-2026-07-23_20-54-01.png)
 
 ### Windowed DPS overlay
+
 ![eqdps windowed interface](img/Screenshot-2026-07-21_08-39-26.png)
 
-### Plane of Sky tracker
-![eqdps windowed interface](img/Screenshot-2026-07-23_20-55-31.png)
+### Windowed Plane of Sky tracker
 
+![eqdps windowed interface](img/Screenshot-2026-07-23_20-55-31.png)
 
 ## Features
 
 - Live EverQuest log tailing
-- Terminal and graphical frontends with separate dependency graphs
+- Terminal and graphical frontends
 - Concurrent active-mob and completed-mob history display
 - Independent mob endings from death, player death, and idle timeout
 - Player, pet, mob, spell, proc, DoT, and damage-shield parsing
@@ -51,128 +61,12 @@ in-game DPS overlay, and the Plane of Sky quest tracker in both interfaces.
 - Expandable details grouped by melee, cast magic, proc, DoT, and shield
 - History replay and mob-name filtering
 - EverQuest Legends Plane of Sky quest inventory and completion tracking
+- Configurable spell-fade, text, exact-text, and regular-expression events
+- Cross-platform desktop notifications with optional EverQuest spell icons
+- Embedded and user-provided notification sounds with shared volume control
 - Optional EQLDB inventory-export uploads from both frontends
-- Compact graphical DPS overlay
+- Compact graphical DPS overlay with font, opacity, and idle-timeout preferences
 - Plain-text output mode for parser comparisons
-
-## Installation
-
-Clone the repository first:
-
-```bash
-git clone https://github.com/uija/eqdps.git
-cd eqdps
-```
-
-### Build with Make
-
-The supported source-build workflow uses the repository Makefile. Build both
-Linux frontends into `dist/`:
-
-```bash
-make
-```
-
-Build only one frontend when needed:
-
-```bash
-make gui
-make tui
-```
-
-The terminal frontend has no graphical toolkit dependencies. The graphical
-frontend uses Gio and requires native window-system development libraries on
-Linux.
-
-Install both Linux frontends, the application-menu entry, and the scalable icon
-system-wide:
-
-```bash
-sudo make install
-```
-
-For an installation below the current user's `~/.local` directory instead:
-
-```bash
-make install PREFIX=~/.local
-```
-
-Remove the files with the same installation prefix:
-
-```bash
-sudo make uninstall
-make uninstall PREFIX=~/.local
-```
-
-Other useful targets are `make test`, `make clean`, and `make windows`. The
-Windows target creates stripped amd64 GUI and TUI executables in `dist/` without
-changing the host Go environment or requiring MinGW or Clang.
-
-### Windows Test Release
-
-Windows testers can download the manually generated GUI executable from the
-[v0.1.0 GitHub release](https://github.com/uija/eqdps/releases/tag/v0.1.0).
-This is an early testing release, so reports from different Windows systems are
-welcome.
-
-The Windows executable is not currently code-signed. Microsoft Defender
-SmartScreen may therefore show an **Unknown publisher** warning, especially
-while the release has little download reputation. Download Windows builds only
-from the official GitHub release page linked above. This warning alone does not
-mean that Defender detected malware; it indicates that Windows cannot verify a
-trusted publisher signature.
-
-### Fedora Build Dependencies
-
-Install Go and the libraries required to compile Gio:
-
-```bash
-sudo dnf install golang make
-sudo dnf install gcc pkgconf-pkg-config libxkbcommon-devel wayland-devel vulkan-loader-devel libX11-devel libglvnd-devel libxkbcommon-x11-devel libXcursor-devel libXfixes-devel
-```
-
-The TUI-only target needs Go and Make but does not need the Gio libraries.
-
-### Ubuntu, Debian, and Mint Build Dependencies
-
-Install Go, Make, and the libraries required to compile Gio:
-
-```bash
-sudo apt install \
-    golang-go \
-    make \
-    gcc \
-    pkg-config \
-    libxkbcommon-dev \
-    libwayland-dev \
-    libvulkan-dev \
-    libx11-dev \
-    libx11-xcb-dev \
-    libglvnd-dev \
-    libxkbcommon-x11-dev \
-    libxcursor-dev \
-    libxfixes-dev \
-    build-essential
-```
-
-As on Fedora, the TUI-only target does not need the Gio development libraries.
-
-### Manual Builds
-
-The equivalent direct Go commands remain available when Make is unavailable.
-Build the Linux frontends manually from the repository root:
-
-```bash
-go build -o eqdps-gui ./gui
-go build -o eqdps ./tui
-```
-
-Cross-compile stripped Windows amd64 executables manually:
-
-```bash
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -H=windowsgui" -o eqdps-gui-windows-amd64.exe ./gui
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o eqdps-tui-windows-amd64.exe ./tui
-```
 
 ## Terminal Frontend
 
@@ -196,6 +90,7 @@ go run ./tui /path/to/eqlog_character_server.txt
 | --- | --- |
 | `o` | Open the history menu, including a full-log replay |
 | `p` | Open the Plane of Sky quest tracker |
+| `n` | Open the Events page |
 | `e` | Open EQLDB connection management |
 | `/` | Filter displayed fights by mob name |
 | `Enter` | Expand or collapse a mob, combatant, or detail category |
@@ -203,11 +98,59 @@ go run ./tui /path/to/eqlog_character_server.txt
 | `r` | Reset combat and session XP meters |
 | `q` / `Esc` | Quit |
 
-### History and Replay
+### Command-Line Flags
 
-The in-app history menu offers Now, 1h, 4h, 8h, 1d, and Full. After loading
-history, press `/` and enter a case-insensitive mob-name substring to compare
-matching fights. Submit an empty filter to show every fight again.
+| Flag | Default | Description |
+| --- | ---: | --- |
+| `--back=N` | `0` | Parse the last `N` minutes before live tailing |
+| `--since "YYYY-MM-DD HH:MM"` | empty | Parse from an absolute log timestamp |
+| `--history=N` | `0` | Completed mobs to keep and show; `0` keeps all |
+| `--idle-timeout=15s` | `15s` | End each mob record after this duration without activity |
+| `--text` | `false` | Print text output instead of opening the TUI |
+
+## Events and Notifications
+
+Open **EVENTS** in the GUI left rail or press `n` from the TUI DPS screen. The
+shared Events workspace supports spell-fade, plain-text, exact-text, and
+regular-expression triggers. Each event can independently show a desktop
+notification, play a sound, or do both. Notifications can request persistent
+display, although the desktop environment controls the final behavior.
+
+The TUI Events page uses these scoped keys:
+
+| Key | Events action |
+| --- | --- |
+| `a` | Activate or deactivate the selected event |
+| `Enter` | Edit the selected event |
+| `d` | Delete the selected event |
+| `s` | Add a spell-fade event |
+| `t` | Add a text event |
+| `r` | Add a regular-expression event |
+| `v` | Set notification-sound volume (arrow keys adjust by 5%) |
+| `i` | Run spell-icon setup manually |
+| `q` / `Esc` | Return to the DPS screen |
+
+Only genuinely new logfile lines trigger events. History replay, Plane of Sky
+initial scans, and checkpoint catch-up never play sounds or display desktop
+notifications.
+
+The GUI provides the same event editors and a 0–100% master volume slider.
+Both frontends use one event configuration and master volume. Copy MP3 or WAV
+files into the event `audio/` directory described under
+[Configuration and Data](#configuration-and-data), then reopen Events to make
+them available in the sound selector.
+
+When Events is first opened with a logfile selected, eqdps can extract the
+spell icons from the associated EverQuest installation for use in spell
+notifications. Declining suppresses future automatic prompts; setup remains
+available manually.
+
+## History and Replay
+
+Both frontends can load Now, 1h, 4h, 8h, 1d, or Full history. In the TUI, press
+`o`; in the GUI, use **Combat → Load history**. Filtering accepts a
+case-insensitive mob-name substring, and an empty query shows every fight
+again.
 
 Seed the TUI with recent history before continuing live:
 
@@ -233,7 +176,7 @@ Print text output instead of opening the TUI:
 ./eqdps --text --back=30 /path/to/log.txt
 ```
 
-### EQLDB Inventory Uploads
+## EQLDB Inventory Uploads
 
 Both frontends can connect to [EQLDB](https://eqldb.org/) and upload an
 EverQuest Legends inventory export when `/outputfile inventory` completes.
@@ -267,20 +210,34 @@ Repeated export messages within two seconds are combined into one upload.
 After an upload begins, a shared 15-second cooldown prevents accidental
 duplicate uploads, including when more than one eqdps process is running.
 
-The token and introduction state are shared by both frontends in
-`eqdps/eqldb.json` below the operating system's user configuration directory.
 The token grants only `inventory:upload`; it can be revoked from the Connected
 apps section of the EQLDB account.
 
-### Command-Line Flags
+## Configuration and Data
 
-| Flag | Default | Description |
-| --- | ---: | --- |
-| `--back=N` | `0` | Parse the last `N` minutes before live tailing |
-| `--since "YYYY-MM-DD HH:MM"` | empty | Parse from an absolute log timestamp |
-| `--history=N` | `0` | Completed mobs to keep and show; `0` keeps all |
-| `--idle-timeout=15s` | `15s` | End each mob record after this duration without activity |
-| `--text` | `false` | Print text output instead of opening the TUI |
+Shared application data is stored in the platform's `eqdps` user-configuration
+directory:
+
+| Platform | Default directory |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/eqdps` or `~/.config/eqdps` |
+| Windows | `%AppData%\eqdps` |
+| macOS | `~/Library/Application Support/eqdps` |
+
+The directory contains:
+
+| Path | Purpose |
+| --- | --- |
+| `events.json` | Event definitions shared by both frontends |
+| `events-settings.json` | Master sound volume and spell-icon setup |
+| `audio/` | User-provided MP3 and WAV notification sounds |
+| `spell-icons/` | Extracted EverQuest spell icons |
+| `eqldb.json` | Shared EQLDB connection and introduction state |
+| `gui.json` | GUI preferences, recent logs, and window state |
+
+Plane of Sky progress is character-specific and remains in
+`CHARACTER_SERVER_PoS.json` beside the selected logfile. Event and EQLDB writes
+are protected against concurrent eqdps processes.
 
 ## Graphical Frontend
 
@@ -296,11 +253,16 @@ Select a logfile through **File → Open logfile**. The selected logfile and
 recent-file list are remembered between launches. Combat history replays and
 large Plane of Sky catch-ups show cancellable progress.
 
+Use the **DPS**, **SKY**, **EVENTS**, and **SET** workspaces in the left rail.
+The same destinations are available from the **View** and **Tools** menus.
+Class, spell, and sound selectors in the Events editor remain bounded inside
+the scrolling workspace.
+
 **Combat → Reset session** clears the current combat and XP session and resumes
 at the end of the selected logfile. The default combat idle timeout is 15
-seconds and can be changed under **Tools → Preferences**. Main-window and DPS
-overlay sizes are restored; screen placement remains controlled by the window
-manager.
+seconds and can be changed under **Tools → Preferences**. Preferences also
+control main-window font scale, DPS-overlay font scale, and overlay opacity.
+Main-window and DPS-overlay sizes are restored between launches.
 
 Use **Tools → EQLDB connection** to connect or manage automatic inventory
 uploads. Detection notifications appear temporarily in the bottom status bar.
@@ -454,24 +416,109 @@ limit. DPS uses the combatant or ability's active interval, while deliberate
 engagement supplies the local player's SDPS interval. SDPS uses the shared mob
 duration and is hidden when it is within ten percent of DPS.
 
-## Development
+## Building from Source
 
-Project documentation:
-
-- [GUI roadmap](docs/GUI_ROADMAP.md)
-- [Windows 11 GUI handoff](docs/WINDOWS_HANDOFF.md)
-- [Parser recheck guide](docs/PARSER_RECHECK.md)
-- [Project context and engineering handoff](docs/PROJECT_CONTEXT.md)
-- [Events integration handoff](docs/EVENTS_INTEGRATION.md)
-- [EQLDB connected-application API](docs/CONNECTED_APPLICATION_API.md)
-- [`/who` classes and races](docs/WHO_METADATA.md)
-
-Run all shared, terminal, and graphical tests:
+Clone the repository first:
 
 ```bash
-go test ./...
-go test ./tui/...
-go test ./gui/...
+git clone https://github.com/uija/eqdps.git
+cd eqdps
+```
+
+### Fedora Build Dependencies
+
+Install Go and the libraries required to compile Gio:
+
+```bash
+sudo dnf install golang make
+sudo dnf install gcc pkgconf-pkg-config libxkbcommon-devel wayland-devel vulkan-loader-devel libX11-devel libglvnd-devel libxkbcommon-x11-devel libXcursor-devel libXfixes-devel
+```
+
+The TUI-only target needs Go and Make but does not need the Gio libraries.
+
+### Ubuntu, Debian, and Mint Build Dependencies
+
+Install Go, Make, and the libraries required to compile Gio:
+
+```bash
+sudo apt install \
+    golang-go \
+    make \
+    gcc \
+    pkg-config \
+    libxkbcommon-dev \
+    libwayland-dev \
+    libvulkan-dev \
+    libx11-dev \
+    libx11-xcb-dev \
+    libglvnd-dev \
+    libxkbcommon-x11-dev \
+    libxcursor-dev \
+    libxfixes-dev \
+    build-essential
+```
+
+As on Fedora, the TUI-only target does not need the Gio development libraries.
+
+### Build with Make
+
+The supported source-build workflow uses the repository Makefile. Build both
+Linux frontends into `dist/`:
+
+```bash
+make
+```
+
+Build only one frontend when needed:
+
+```bash
+make gui
+make tui
+```
+
+The terminal frontend has no graphical toolkit dependencies. The graphical
+frontend uses Gio and requires native window-system development libraries on
+Linux.
+
+Install both Linux frontends, the application-menu entry, and the scalable icon
+system-wide:
+
+```bash
+sudo make install
+```
+
+For an installation below the current user's `~/.local` directory instead:
+
+```bash
+make install PREFIX=~/.local
+```
+
+Remove the files with the same installation prefix:
+
+```bash
+sudo make uninstall
+make uninstall PREFIX=~/.local
+```
+
+Other useful targets are `make test`, `make clean`, and `make windows`. The
+Windows target creates stripped amd64 GUI and TUI executables in `dist/` without
+changing the host Go environment or requiring MinGW or Clang.
+
+### Manual Builds
+
+The equivalent direct Go commands remain available when Make is unavailable.
+Build the Linux frontends manually from the repository root:
+
+```bash
+go build -o eqdps-gui ./gui
+go build -o eqdps ./tui
+```
+
+Cross-compile stripped Windows amd64 executables manually:
+
+```bash
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -H=windowsgui" -o eqdps-gui-windows-amd64.exe ./gui
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o eqdps-tui-windows-amd64.exe ./tui
 ```
 
 ## Plane of Sky Data Attribution
@@ -493,14 +540,17 @@ unless otherwise noted. The EQL Wiki-derived dataset and adaptations of that
 data are therefore provided under CC BY-SA 4.0. The application source code
 remains licensed under MIT.
 
-## Thank Yous
+## Thanks
 
-Big thank you to my Guild **Side Gigg** on Rivervale. Also many many thanks to
+A big thank you to my guild **Side Gigg** on Rivervale, and many thanks to
 **Karthar** for providing test data, testing the application, giving feedback,
-providing KDE fixes and beeing awesome during the development.
+providing the KDE fixes, and being awesome throughout development.
 
 ## License
 
 The application source code is licensed under the MIT License. The embedded
 EQL Wiki-derived Plane of Sky dataset is licensed under CC BY-SA 4.0 as
 described above.
+
+The embedded notification sounds are provided under CC0 1.0 and are described
+in [Third-Party Notices](docs/THIRD_PARTY_NOTICES.md).

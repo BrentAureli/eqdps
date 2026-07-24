@@ -222,6 +222,20 @@ func TestCatchupBoundarySuppressesHistoricalCombatButKeepsCompletedPartialLine(t
 	if !isLiveLineAfterCatchup(target+1, target) {
 		t.Fatal("line completed after catch-up boundary must remain live")
 	}
+	observer := &recordingLiveObserver{}
+	dispatchEventLineAfterCatchup("historical", target, target, observer)
+	dispatchEventLineAfterCatchup("live", target+1, target, observer)
+	if len(observer.lines) != 1 || observer.lines[0] != "live" {
+		t.Fatalf("dispatched event lines = %#v, want only live line", observer.lines)
+	}
+}
+
+type recordingLiveObserver struct {
+	lines []string
+}
+
+func (o *recordingLiveObserver) ObserveLiveLine(line string) {
+	o.lines = append(o.lines, line)
 }
 
 func TestFillSkyQuestTableShowsReadySummaryAndRequirementSources(t *testing.T) {

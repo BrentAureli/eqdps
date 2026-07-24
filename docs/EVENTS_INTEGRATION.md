@@ -1,5 +1,23 @@
 # Events Integration Handoff
 
+## Implementation Status
+
+The integration described here is implemented on the
+`feature/events-integration` branch:
+
+- shared model, compiled matcher, catalogue, persistence, audio, notification,
+  and icon-extraction packages;
+- one live-line-only dispatch boundary used by both frontends;
+- replay and Plane of Sky catch-up suppression regressions;
+- the TUI Events page and contextual spell-icon prompt;
+- the Gio Events workspace and bounded inline selectors;
+- a shared persisted master notification-sound volume control;
+- cross-platform notification delivery through `beeep`;
+- migrated `logtest` and `spellcatalog` developer utilities;
+- CGO-disabled Windows amd64 GUI and TUI build verification.
+
+A real Windows 11 desktop-notification test remains required before release.
+
 This document captures the decisions for integrating the standalone
 `eqlogevents` prototype into `eqdps`. Read it together with
 [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md), then inspect both codebases before
@@ -179,5 +197,6 @@ an explicit locking strategy.
 6. Update user documentation, licenses/attribution, build files, and release
    checks.
 
-The feature has been discussed and designed but has not yet been implemented in
-the `eqdps` repository.
+The prototype configuration remains separate; no automatic import from
+`eqlogevents/events.json` is performed. Both eqdps frontends use the shared
+locked configuration below the eqdps user-configuration directory.

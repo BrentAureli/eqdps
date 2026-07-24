@@ -148,9 +148,9 @@ func (s *shell) showWaylandHelp() {
 func (s *shell) setOverlayVisible(visible bool) {
 	s.settings.OverlayVisible = visible
 	if visible {
-		s.menus[2].items[2].name = "Hide DPS overlay"
+		s.menus[2].items[3].name = "Hide DPS overlay"
 	} else {
-		s.menus[2].items[2].name = "Show DPS overlay"
+		s.menus[2].items[3].name = "Show DPS overlay"
 	}
 	if err := saveSettings(s.settings); err != nil {
 		s.statusText = "Overlay preference could not be saved"
